@@ -12,7 +12,7 @@
 | TC-09 | ✅ PASS | error_code=ORDER_NOT_FOUND: 订单号 AT-99999 不存在，请核对后重试。 |
 | TC-10 | ✅ PASS | error_code=RETURN_NOT_ALLOWED: 定制类商品（刻字手机壳）不支持无理由退货，仅质量问题可退换。如确有质量问题，请描述具体故障，我们可以为您走质量退换流程。 |
 | TC-07 | ✅ PASS | pending popped=True, order untouched=True |
-| TC-08 | ✅ PASS | ticket=RT-951DE468, order status=退货已受理-RT-951DE468 |
+| TC-08 | ✅ PASS | ticket=RT-7C00A2BB, order status=退货已受理-RT-7C00A2BB |
 | TC-11 | ✅ PASS | error_code=BACKEND_TIMEOUT: 退货系统暂时不可用，请稍后重试或转人工处理。 |
 | TC-04 | ✅ PASS | clarifying reply, tools=[] |
 | TC-12 | ✅ PASS | refusal=True, handoff=True, handoff_summary_retained=True |
@@ -23,13 +23,12 @@
 ## Coverage map (vs. assignment requirements)
 
 - Grounded answers: TC-01, TC-02
-- Unknown / ambiguous: TC-03, TC-04, TC-14
+- Unknown / ambiguous: TC-03, TC-04
 - Customer action: TC-05, TC-06 (+ TC-06-agent end-to-end)
 - Confirmation / cancellation: TC-07, TC-08
 - Tool failure: TC-09, TC-11
 - Policy boundary: TC-10
 - Human handoff: TC-12
-- Knowledge conflict (customer claim vs KB): TC-13
 
 Layer key: `retrieval`/`tool`/`state_machine` tests are deterministic and run without an LLM. 
 `agent` tests (TC-04, TC-12, TC-06-agent) require `OPENAI_API_KEY` and exercise the full LangGraph agent.

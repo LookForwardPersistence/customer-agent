@@ -20,7 +20,7 @@ The demo session is pre-loaded as customer 陈先生 with orders `AT-10086` (shi
 
 ## Architecture
 
-See `ARCHITECTURE.md` for the full design document (layered diagram, confirmation state machine, request sequence, design decisions, and production roadmap). Summary:
+See `ARCHITECTURE.md` for the full design document (layered diagram, confirmation state machine, request sequence, design decisions, and production roadmap), and `DEVELOPMENT.md` for the development design (module-level specs, API contracts, data schemas, frontend components, evaluation design, and a debugging guide). Summary:
 
 ```
 Browser (chat UI)
@@ -54,6 +54,11 @@ Other deliberate choices (details in `BUILD_NOTES.md`):
 ```bash
 python -m evaluation.run_eval                       # deterministic layer, no LLM needed
 OPENAI_API_KEY=... python -m evaluation.run_eval    # + live agent tests (TC-04, TC-06-agent, TC-12)
+
+# Targeted live verification of the four core capabilities (server on :8021):
+# tool/action boundary, confirmation (typed "确认" never executes, double-confirm rejected),
+# state management (cross-turn references, session isolation), handoff with context.
+python evaluation/verify_capabilities.py
 ```
 
 15 cases in `evaluation/test_cases.json` cover: grounded answers, unknown/ambiguous questions, a customer claim that **conflicts** with the KB (corrected, not conceded), an unsupported product-spec question (search first, then admit unknown), order lookup, return proposal, confirmation & cancellation, tool failure (missing order + backend timeout), policy boundary (custom engraved items), and human handoff with retained context. Results: `evaluation/results.md` (15/15).
