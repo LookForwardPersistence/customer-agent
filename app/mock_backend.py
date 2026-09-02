@@ -63,8 +63,11 @@ class MockOrderAPI:
 
     def __init__(self, data_path: Path | None = None):
         self._lock = threading.Lock()
-        path = data_path or DATA_DIR / "orders.json"
-        with open(path, encoding="utf-8") as f:
+        self._path = data_path or DATA_DIR / "orders.json"
+        self._reload()
+
+    def _reload(self) -> None:
+        with open(self._path, encoding="utf-8") as f:
             self._db: dict[str, dict] = {
                 o["order_id"]: o for o in json.load(f)["orders"]
             }
@@ -72,6 +75,17 @@ class MockOrderAPI:
         # idempotency_key -> executed result. A retried confirm must return the
         # SAME ticket rather than creating a second return.
         self._idempotency: dict[str, dict] = {}
+
+    def reset(self) -> None:
+        """Reload orders from disk, discarding all in-memory mutations.
+
+        Demo semantics: every new session starts from the pristine dataset
+        (order statuses, return tickets, idempotency records), so a browser
+        refresh gives the presenter a clean slate. A real OMS obviously never
+        resets — this exists only because the mock has no persistence.
+        """
+        with self._lock:
+            self._reload()
 
     @property
     def known_customers(self) -> dict[str, str]:

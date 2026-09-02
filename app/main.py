@@ -338,6 +338,9 @@ def new_session(req: NewSessionRequest | None = None):
     known = order_api.known_customers
     if req.customer_id not in known:
         raise HTTPException(400, f"unknown customer_id: {req.customer_id}")
+    # Demo reset: a new session (browser refresh / customer switch) restores the
+    # pristine order dataset so every demo run starts from a clean slate.
+    order_api.reset()
     sid = new_session_id()
     token = tokens.issue(req.customer_id, sid)
     return {
