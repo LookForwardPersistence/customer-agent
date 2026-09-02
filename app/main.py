@@ -76,9 +76,13 @@ def _extract_turn_info(new_messages: list) -> dict[str, Any]:
                 {"type": "tool_result", "name": name, "detail": json.dumps(parsed, ensure_ascii=False)[:400]}
             )
             if name == "search_knowledge_base" and parsed.get("found"):
-                sources = [
-                    {"id": r["id"], "topic": r["topic"]} for r in parsed["results"]
-                ]
+                # Accumulate across multiple retrievals in one turn: a single
+                # reply often cites several KB entries fetched by separate
+                # searches, so overwriting would hide cited sources.
+                for r in parsed["results"]:
+                    item = {"id": r["id"], "topic": r["topic"]}
+                    if item not in sources:
+                        sources.append(item)
             elif name == "propose_return" and parsed.get("status") == "NEEDS_CONFIRMATION":
                 pending = parsed["proposal"]
             elif name == "handoff_to_human":

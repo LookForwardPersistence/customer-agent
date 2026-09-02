@@ -55,13 +55,16 @@ Other deliberate choices (details in `BUILD_NOTES.md`):
 python -m evaluation.run_eval                       # deterministic layer, no LLM needed
 OPENAI_API_KEY=... python -m evaluation.run_eval    # + live agent tests (TC-04, TC-06-agent, TC-12)
 
-# Targeted live verification of the four core capabilities (server on :8021):
+# Targeted live verification of the core capabilities (server on :8021, 16 checks):
 # tool/action boundary, confirmation (typed "确认" never executes, double-confirm rejected),
-# state management (cross-turn references, session isolation), handoff with context.
+# state management (cross-turn references, session isolation), handoff with context,
+# source visibility across multi-retrieval turns, and trace-without-chain-of-thought.
 python evaluation/verify_capabilities.py
 ```
 
 15 cases in `evaluation/test_cases.json` cover: grounded answers, unknown/ambiguous questions, a customer claim that **conflicts** with the KB (corrected, not conceded), an unsupported product-spec question (search first, then admit unknown), order lookup, return proposal, confirmation & cancellation, tool failure (missing order + backend timeout), policy boundary (custom engraved items), and human handoff with retained context. Results: `evaluation/results.md` (15/15).
+
+`REQUIREMENTS_VERIFICATION.md` maps every assignment requirement to its evidence (requirement-by-requirement compliance matrix, deliverable check, and known limitations).
 
 ## Repo layout
 
@@ -79,6 +82,8 @@ evaluation/
   test_cases.json     15 cases with expected behavior
   run_eval.py         runner (deterministic + optional live agent layer)
   results.md          results table
+  verify_capabilities.py  16-check live verification of the core capabilities
+REQUIREMENTS_VERIFICATION.md  requirement-by-requirement compliance matrix
 ```
 
 ## Trade-offs & what I'd build next
@@ -88,3 +93,5 @@ See `BUILD_NOTES.md` — includes the time split, what was intentionally *not* b
 ## Verifying without a demo video
 
 `VERIFICATION.md` is a step-by-step guide mapping every assignment requirement to a concrete scenario you can run in the UI in ~10 minutes, plus the one-command automated evaluation and a 30-second architecture check of the confirmation guardrail.
+
+For the compliance side (what was checked, what passed, and what is knowingly not covered), see `REQUIREMENTS_VERIFICATION.md`.

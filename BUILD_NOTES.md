@@ -7,10 +7,41 @@
 | Scoping, architecture, data/knowledge-base design | ~30 min |
 | LangGraph agent + tools + confirmation state machine | ~45 min |
 | FastAPI backend + chat UI (sources, trace, confirm, handoff) | ~45 min |
-| Evaluation harness + 12 test cases + fixes | ~30 min |
-| README / build notes | ~15 min |
+| Evaluation harness + 15 test cases + fixes | ~30 min |
+| README / build notes / verification guide | ~15 min |
 
-AI coding tools (CodeBuddy/Claude) were used for scaffolding and boilerplate; all architectural decisions, the confirmation-guardrail design, the knowledge base content, and the evaluation cases were specified and verified by me. Deterministic evaluation was run locally and verified against the actual outputs.
+## Use of AI coding tools (and what I verified myself)
+
+Per the assignment's technical guidelines, here is the split:
+
+**What AI tools (CodeBuddy / Claude) did** — scaffolding and boilerplate: project
+skeleton and dependency setup, the FastAPI route wiring, the chat UI markup and
+CSS, and first drafts of documentation.
+
+**What I specified myself** — every decision that carries engineering weight:
+
+- the propose-confirm security model (LLM can propose; only the UI can execute)
+- the knowledge-base content and the grounding rules in the system prompt
+- the error-code contract on the mock backend (`OrderAPI` protocol)
+- the evaluation cases and their expected behaviour, including the adversarial
+  ones (prompt injection, customer claims that conflict with the KB)
+
+**What I verified myself** — I did not accept generated output on trust:
+
+- ran the full deterministic suite (11 cases) and read the actual outputs, not
+  just the pass/fail line; this is how the retrieval-threshold fragility and the
+  `sources` overwrite bug were found
+- drove the live agent against DeepSeek for every agent-layer case, debugging
+  two real behavioural defects (the agent re-asking for an already-stated return
+  reason; an eval assertion that was wrong, not the agent)
+- adversarial spot-check: asked the agent to skip confirmation and execute a
+  return directly — refused, and a repo-wide `grep` confirms `create_return` is
+  absent from the tool list exposed to the LLM
+- verified no secrets reached the repo (`git ls-files` contains no `.env`, no
+  `sk-` strings)
+
+Two fixes came out of these checks rather than from trusting the first draft,
+both recorded in `REQUIREMENTS_VERIFICATION.md`.
 
 ## Intentionally NOT built (and why)
 

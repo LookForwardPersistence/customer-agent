@@ -12,7 +12,7 @@
 | TC-09 | ✅ PASS | error_code=ORDER_NOT_FOUND: 订单号 AT-99999 不存在，请核对后重试。 |
 | TC-10 | ✅ PASS | error_code=RETURN_NOT_ALLOWED: 定制类商品（刻字手机壳）不支持无理由退货，仅质量问题可退换。如确有质量问题，请描述具体故障，我们可以为您走质量退换流程。 |
 | TC-07 | ✅ PASS | pending popped=True, order untouched=True |
-| TC-08 | ✅ PASS | ticket=RT-7C00A2BB, order status=退货已受理-RT-7C00A2BB |
+| TC-08 | ✅ PASS | ticket=RT-B1319E48, order status=退货已受理-RT-B1319E48 |
 | TC-11 | ✅ PASS | error_code=BACKEND_TIMEOUT: 退货系统暂时不可用，请稍后重试或转人工处理。 |
 | TC-04 | ✅ PASS | clarifying reply, tools=[] |
 | TC-12 | ✅ PASS | refusal=True, handoff=True, handoff_summary_retained=True |

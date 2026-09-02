@@ -166,7 +166,9 @@ grep -n "create_return" app/main.py      # 仅在 /api/session/confirm（UI 按�
 
 | 验证层 | 覆盖 | 结果 |
 | --- | --- | --- |
-| 确定性评估（无 LLM） | TC-01/02/03/05/06/07/08/09/10/11 | 10/10 PASS |
-| Agent 层（DeepSeek live） | TC-04、TC-06-agent、TC-12 | 3/3 PASS |
-| 端到端 API（真实 HTTP） | 退货全流程（提案→确认→执行→事件链） | PASS（2026-09-02 实测） |
-| 手动场景 | 本文档第 1 节 A-I | 按上述步骤复现 |
+| 确定性评估（无 LLM） | TC-01/02/03/05/06/07/08/09/10/11（11 项） | 11/11 PASS |
+| Agent 层（DeepSeek live） | TC-04、TC-06-agent、TC-12、TC-13、TC-14（5 项） | 5/5 PASS |
+| 能力专项（真实 HTTP，需服务运行于 8021） | 边界 1 / 确认 5 / 状态 4 / handoff 3 / 来源与轨迹 3 | 16/16 PASS |
+| 手动场景 | 本文档第 1 节 A–I | 按上述步骤复现 |
+
+需求符合性的逐条核对（含交付物核验与已知局限）见 `REQUIREMENTS_VERIFICATION.md`。
