@@ -3,6 +3,7 @@
     {
       "order_id": "AT-10086",
       "customer": "陈先生",
+      "customer_id": "CUST-001",
       "status": "已发货",
       "carrier": "顺丰速运",
       "tracking_no": "SF1234567890",
@@ -19,6 +20,7 @@
     {
       "order_id": "AT-10092",
       "customer": "陈先生",
+      "customer_id": "CUST-001",
       "status": "待发货",
       "carrier": null,
       "tracking_no": null,
@@ -34,6 +36,7 @@
     {
       "order_id": "AT-10077",
       "customer": "李女士",
+      "customer_id": "CUST-002",
       "status": "已签收",
       "carrier": "圆通速递",
       "tracking_no": "YT9876543210",
@@ -49,6 +52,7 @@
     {
       "order_id": "AT-10099",
       "customer": "赵先生",
+      "customer_id": "CUST-003",
       "status": "已签收",
       "carrier": "京东物流",
       "tracking_no": "JD5566778899",
@@ -64,6 +68,7 @@
     {
       "order_id": "AT-10050",
       "customer": "王先生",
+      "customer_id": "CUST-004",
       "status": "已签收",
       "carrier": "中通快递",
       "tracking_no": "ZT1122334455",

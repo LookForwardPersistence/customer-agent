@@ -17,6 +17,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
+from .auth import current_customer_id
 from .knowledge_base import kb
 from .mock_backend import OrderAPIError, order_api
 
@@ -77,7 +78,7 @@ def get_order_status(order_id: str) -> str:
     """
     try:
         return json.dumps(
-            {"ok": True, "order": _fmt_order(order_api.get_order(order_id))},
+            {"ok": True, "order": _fmt_order(order_api.get_order(order_id, customer_id=current_customer_id()))},
             ensure_ascii=False,
         )
     except OrderAPIError as e:
@@ -95,7 +96,7 @@ def propose_return(order_id: str, reason: str) -> str:
         reason: 退货原因（如不想要了 / 质量问题 / 描述不符）。
     """
     try:
-        proposal = order_api.validate_return(order_id, reason)
+        proposal = order_api.validate_return(order_id, reason, customer_id=current_customer_id())
         return json.dumps(
             {
                 "status": "NEEDS_CONFIRMATION",

@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Defence in depth: even if a rendering bug reintroduces injected markup,
+     no external script / event handler can execute. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'">
 <title>Aurora Tech Store · 智能客服</title>
 <style>
   :root {
@@ -132,13 +136,19 @@
         <div class="sub">智能客服 · 小极 | 在线 9:00–21:00</div>
       </div>
       <button class="trace-btn" id="traceToggle">执行轨迹 Trace</button>
+      <select id="customerSel" title="切换演示客户（将创建新会话）">
+        <option value="CUST-001">陈先生（演示主账号）</option>
+        <option value="CUST-002">李女士</option>
+        <option value="CUST-003">赵先生</option>
+        <option value="CUST-004">王先生</option>
+      </select>
     </header>
     <div id="messages">
       <div class="welcome">
         <b>您好，我是小极 👋</b><br>
         我是 Aurora Tech Store 的客服专员，可以帮您：
         查询<b>订单与物流</b>、解答<b>退换货/保修/运费</b>等政策、以及<b>申请退货</b>。<br>
-        当前演示账号为「陈先生」，名下订单：<b>AT-10086</b>（已发货）、<b>AT-10092</b>（待发货）。
+        <span id="welcomeCustomer"></span>
       </div>
     </div>
     <div class="quick" id="quick">
@@ -155,160 +165,12 @@
 
   <div class="trace-panel" id="tracePanel">
     <h3>执行轨迹（最近一轮）</h3>
+    <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      <input type="checkbox" id="rawTraceToggle"> 显示未脱敏原始内容（仅本地排查用）
+    </label>
     <div id="traceList" style="color:var(--muted);font-size:12px;">暂无。发送一条消息后，这里会展示检索来源、工具调用与结果（不含隐藏推理）。</div>
   </div>
 
-<script>
-const state = { sessionId: null, busy: false };
-const msgs = document.getElementById('messages');
-const input = document.getElementById('input');
-const send = document.getElementById('send');
-
-function scrollBottom() { msgs.scrollTop = msgs.scrollHeight; }
-
-function addBubble(role, text) {
-  const row = document.createElement('div');
-  row.className = 'row ' + role;
-  if (role === 'bot') {
-    const av = document.createElement('div'); av.className = 'avatar bot'; av.textContent = '极';
-    row.appendChild(av);
-  }
-  const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text;
-  row.appendChild(b);
-  msgs.appendChild(row); scrollBottom();
-  return b.parentElement;
-}
-
-function addMetaSources(rowEl, sources) {
-  if (!sources || !sources.length) return;
-  const meta = document.createElement('div'); meta.className = 'meta';
-  meta.style.justifyContent = 'flex-end'; meta.style.maxWidth = '78%';
-  const label = document.createElement('span'); label.textContent = '依据来源：';
-  meta.appendChild(label);
-  sources.forEach(s => {
-    const chip = document.createElement('span'); chip.className = 'src-chip';
-    chip.textContent = `${s.id} ${s.topic}`; meta.appendChild(chip);
-  });
-  rowEl.appendChild(meta); scrollBottom();
-}
-
-function showTyping() {
-  const row = document.createElement('div'); row.className = 'row bot'; row.id = 'typingRow';
-  const av = document.createElement('div'); av.className = 'avatar bot'; av.textContent = '极';
-  const b = document.createElement('div'); b.className = 'bubble';
-  b.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
-  row.append(av, b); msgs.appendChild(row); scrollBottom();
-}
-function hideTyping() { const t = document.getElementById('typingRow'); if (t) t.remove(); }
-
-function renderPending(rowEl, pending) {
-  const card = document.createElement('div'); card.className = 'action-card';
-  card.innerHTML = `
-    <h4>⚠️ 退货申请待确认</h4>
-    <div class="detail">
-      订单：<b>${pending.order_id}</b><br>
-      商品：${(pending.items || []).join('、')}<br>
-      退款金额：<b>¥${pending.refund_amount}</b><br>
-      ${pending.policy}
-    </div>
-    <div class="btns">
-      <button class="btn primary" data-act="confirm">确认退货</button>
-      <button class="btn ghost" data-act="cancel">取消</button>
-    </div>`;
-  card.querySelectorAll('button').forEach(btn => {
-    btn.onclick = () => {
-      card.querySelectorAll('button').forEach(b => b.disabled = true);
-      resolveAction(btn.dataset.act);
-    };
-  });
-  rowEl.appendChild(card); scrollBottom();
-}
-
-function renderHandoff(handoff) {
-  const el = document.createElement('div'); el.className = 'handoff';
-  el.innerHTML = `
-    <b>转人工客服 · ${handoff.id}（${handoff.status}）</b>
-    转接原因：${handoff.reason}
-    <div class="ctx">📋 已转交上下文摘要：\n${handoff.context}</div>`;
-  msgs.appendChild(el); scrollBottom();
-}
-
-function renderTrace(trace) {
-  const list = document.getElementById('traceList');
-  if (!trace || !trace.length) { list.textContent = '本轮无工具调用（纯对话回答）。'; return; }
-  list.innerHTML = '';
-  trace.forEach(t => {
-    const item = document.createElement('div');
-    item.className = 'trace-item' + (t.type === 'tool_result' ? ' result' : '');
-    item.innerHTML = `<span class="t">${t.type === 'tool_call' ? '→ 调用' : '← 结果'}</span> ${t.name}<br>${t.detail || ''}`;
-    list.appendChild(item);
-  });
-}
-
-async function post(url, body) {
-  const res = await fetch(url, {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-  return res.json();
-}
-
-async function handleResponse(data) {
-  hideTyping();
-  const rowEl = addBubble('bot', data.reply || '（无回复）');
-  addMetaSources(rowEl, data.sources);
-  if (data.pending_action) renderPending(rowEl, data.pending_action);
-  if (data.handoff) renderHandoff(data.handoff);
-  renderTrace(data.trace);
-}
-
-async function sendMsg(text) {
-  if (state.busy || !text.trim()) return;
-  state.busy = true; send.disabled = true;
-  addBubble('user', text);
-  input.value = '';
-  showTyping();
-  try {
-    const data = await post('/api/chat', { session_id: state.sessionId, message: text });
-    await handleResponse(data);
-  } catch (e) {
-    hideTyping();
-    addBubble('bot', '抱歉，系统开小差了：' + e.message + '。请稍后重试，或点击右上角联系人工客服。');
-  } finally {
-    state.busy = false; send.disabled = false; input.focus();
-  }
-}
-
-async function resolveAction(act) {
-  if (state.busy) return;
-  state.busy = true; send.disabled = true;
-  showTyping();
-  try {
-    const data = await post(`/api/session/${act}`, { session_id: state.sessionId });
-    await handleResponse(data);
-  } catch (e) {
-    hideTyping();
-    addBubble('bot', '操作失败：' + e.message);
-  } finally {
-    state.busy = false; send.disabled = false; input.focus();
-  }
-}
-
-send.onclick = () => sendMsg(input.value);
-input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(input.value); });
-document.getElementById('quick').addEventListener('click', e => {
-  if (e.target.tagName === 'BUTTON') sendMsg(e.target.textContent);
-});
-document.getElementById('traceToggle').addEventListener('click', e => {
-  document.getElementById('tracePanel').classList.toggle('open');
-  e.target.classList.toggle('active');
-});
-
-(async () => {
-  const res = await fetch('/api/session/new', { method: 'POST' });
-  state.sessionId = (await res.json()).session_id;
-})();
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

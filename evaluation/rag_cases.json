@@ -1,0 +1,108 @@
+{
+  "description": "P1-8 RAG final-answer benchmark. Each case is sent to the FULL agent; we score the final reply, not the top retrieval hit. Metrics: groundedness (expected_facts present, must_not absent), citation precision (every KB id cited in the reply points at a source whose content actually contains an expected fact), refusal accuracy (expect_refusal cases must decline instead of inventing).",
+  "cases": [
+    {
+      "id": "RAG-01",
+      "kind": "paraphrase",
+      "query": "收到东西不想要了还能退吗",
+      "expected_facts": ["30 天"],
+      "kb_ids": ["KB-001"]
+    },
+    {
+      "id": "RAG-02",
+      "kind": "paraphrase",
+      "query": "包邮门槛是多少，不到的话要出多少运费",
+      "expected_facts": ["99", "8 元"],
+      "kb_ids": ["KB-002"]
+    },
+    {
+      "id": "RAG-03",
+      "kind": "paraphrase",
+      "query": "保修期内质量问题寄回去的运费谁承担",
+      "expected_facts": ["店铺承担"],
+      "kb_ids": ["KB-004"]
+    },
+    {
+      "id": "RAG-04",
+      "kind": "paraphrase",
+      "query": "下单之后一直没付款会怎么样",
+      "expected_facts": ["30 分钟"],
+      "kb_ids": ["KB-005"]
+    },
+    {
+      "id": "RAG-05",
+      "kind": "paraphrase",
+      "query": "发票忘了开，还能补吗",
+      "expected_facts": ["30 天"],
+      "kb_ids": ["KB-006"]
+    },
+    {
+      "id": "RAG-06",
+      "kind": "paraphrase",
+      "query": "积分怎么用，多少积分能抵一块钱",
+      "expected_facts": ["100 积分"],
+      "kb_ids": ["KB-007"]
+    },
+    {
+      "id": "RAG-07",
+      "kind": "paraphrase",
+      "query": "优惠券一次能用两张吗",
+      "expected_facts": ["一张"],
+      "kb_ids": ["KB-008"]
+    },
+    {
+      "id": "RAG-08",
+      "kind": "paraphrase",
+      "query": "金卡会员有什么权益",
+      "expected_facts": ["95 折", "专属客服"],
+      "kb_ids": ["KB-007"]
+    },
+    {
+      "id": "RAG-09",
+      "kind": "mixed",
+      "query": "退货的话退款多久能到账，运费又是怎么算的",
+      "expected_facts": ["3-5", "99"],
+      "kb_ids": ["KB-001", "KB-002"]
+    },
+    {
+      "id": "RAG-10",
+      "kind": "mixed",
+      "query": "耳机的质保期是多久，无理由退货又能退几天",
+      "expected_facts": ["6 个月", "30 天"],
+      "kb_ids": ["KB-004", "KB-001", "KB-011"]
+    },
+    {
+      "id": "RAG-11",
+      "kind": "conflict",
+      "query": "我记得你们是终身保修的吧，我的充电器坏了",
+      "expected_facts": ["12 个月"],
+      "must_not": ["确实是终身", "提供终身", "终身免费", "可以终身"],
+      "kb_ids": ["KB-004"]
+    },
+    {
+      "id": "RAG-12",
+      "kind": "negative_answerable",
+      "query": "可以货到付款吗",
+      "expected_facts": ["不支持"],
+      "kb_ids": ["KB-005"]
+    },
+    {
+      "id": "RAG-13",
+      "kind": "no_answer",
+      "query": "你们能寄到国外吗",
+      "expect_refusal": true
+    },
+    {
+      "id": "RAG-14",
+      "kind": "no_answer",
+      "query": "你们店老板是谁，公司注册地在哪",
+      "expect_refusal": true
+    },
+    {
+      "id": "RAG-15",
+      "kind": "no_answer",
+      "query": "你们卖的蓝牙耳机续航多少小时",
+      "expect_refusal": true
+    }
+  ]
+}

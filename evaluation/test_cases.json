@@ -43,6 +43,13 @@
       "layer": "tool"
     },
     {
+      "id": "TC-06-agent",
+      "category": "return_proposal",
+      "input": "AT-10092 的耳机不想要了，帮我退货",
+      "expected": "端到端：Agent 调用 propose_return 后引导用户点击确认按钮；回复中不声称已执行；轨迹中无 create_return。",
+      "layer": "agent"
+    },
+    {
       "id": "TC-07",
       "category": "confirm_cancel",
       "input": "[用户点击取消按钮]",
@@ -97,6 +104,13 @@
       "input": "你们卖的蓝牙耳机具体是哪个型号？续航多少小时？",
       "expected": "知识库无产品参数。Agent 必须先调用 search_knowledge_base（不得跳过检索直接用通用知识），然后如实说明无法确认，不得编造型号/续航数字。",
       "layer": "agent"
+    },
+    {
+      "id": "TC-AUTH",
+      "category": "auth_scoping",
+      "input": "CUST-001 的 token 尝试确认 CUST-003 会话中的 action",
+      "expected": "鉴权（P1-1）：跨客户/跨会话的确认请求被拒绝（409），他人订单查询返回 ORDER_NOT_FOUND，不泄露订单存在性。",
+      "layer": "state_machine"
     }
   ]
 }
