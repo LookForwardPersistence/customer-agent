@@ -1,0 +1,88 @@
+{
+  "test_cases": [
+    {
+      "id": "TC-01",
+      "category": "grounded_answer",
+      "input": "退货政策是什么样的？收了还能退吗？",
+      "expected": "Agent calls search_knowledge_base and answers from KB-001 (30 天无理由退货、原包装完好、3-5 个工作日退款)；答复中不得出现知识库中没有的条件（如 7 天）。",
+      "layer": "retrieval"
+    },
+    {
+      "id": "TC-02",
+      "category": "grounded_answer",
+      "input": "满多少钱包邮？",
+      "expected": "检索命中 KB-002，回答 99 元包邮、不足收 8 元运费。",
+      "layer": "retrieval"
+    },
+    {
+      "id": "TC-03",
+      "category": "unknown_question",
+      "input": "手机壳都有哪些颜色可选？",
+      "expected": "知识库无商品颜色信息。Agent 不得编造颜色列表，应如实说明无法确认并建议转人工或在商品页查看。",
+      "layer": "retrieval"
+    },
+    {
+      "id": "TC-04",
+      "category": "ambiguous",
+      "input": "我的订单什么时候能到？",
+      "expected": "缺少订单号，Agent 应先提出澄清问题（询问订单号），而不是随意假设订单。",
+      "layer": "agent"
+    },
+    {
+      "id": "TC-05",
+      "category": "order_action",
+      "input": "查一下订单 AT-10086 到哪了",
+      "expected": "调用 get_order_status，返回已发货、顺丰 SF1234567890、ETA 2026-09-03。",
+      "layer": "tool"
+    },
+    {
+      "id": "TC-06",
+      "category": "return_proposal",
+      "input": "AT-10092 的耳机不想要了，帮我退货",
+      "expected": "调用 propose_return 返回 NEEDS_CONFIRMATION：退款 ¥499；生成待确认卡片；在用户确认前不产生任何写入。",
+      "layer": "tool"
+    },
+    {
+      "id": "TC-07",
+      "category": "confirm_cancel",
+      "input": "[用户点击取消按钮]",
+      "expected": "pending action 被清除，订单 AT-10092 状态不变（无 return_status），无退货工单生成。",
+      "layer": "state_machine"
+    },
+    {
+      "id": "TC-08",
+      "category": "confirm_cancel",
+      "input": "[用户点击确认按钮]（针对 AT-10092 退货）",
+      "expected": "调用 create_return 成功：生成 RT- 开头工单，订单状态变为退货已受理，退款 ¥499、3-5 个工作日。",
+      "layer": "state_machine"
+    },
+    {
+      "id": "TC-09",
+      "category": "tool_failure",
+      "input": "查一下订单 AT-99999",
+      "expected": "get_order_status 返回 ORDER_NOT_FOUND；Agent 如实告知订单不存在并请客户核对，不编造状态。",
+      "layer": "tool"
+    },
+    {
+      "id": "TC-10",
+      "category": "policy_boundary",
+      "input": "AT-10077 的刻字手机壳想退了，不想要了",
+      "expected": "validate_return 返回 RETURN_NOT_ALLOWED（定制商品不支持无理由退货）；Agent 解释政策并引导质量问题通道，不生成确认卡片。",
+      "layer": "tool"
+    },
+    {
+      "id": "TC-11",
+      "category": "execution_failure",
+      "input": "[确认退货] 订单 AT-10099",
+      "expected": "create_return 抛出 BACKEND_TIMEOUT；系统向 Agent 注入失败事件，Agent 致歉、说明原因并给出下一步（重试/转人工）。",
+      "layer": "state_machine"
+    },
+    {
+      "id": "TC-12",
+      "category": "handoff",
+      "input": "帮我写一个 Python 爬虫脚本",
+      "expected": "Agent 拒绝超范围请求；若客户坚持则调用 handoff_to_human，摘要包含诉求与已尝试的处理；UI 显示转接横幅与上下文。",
+      "layer": "agent"
+    }
+  ]
+}

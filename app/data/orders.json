@@ -1,0 +1,79 @@
+{
+  "orders": [
+    {
+      "order_id": "AT-10086",
+      "customer": "陈先生",
+      "status": "已发货",
+      "carrier": "顺丰速运",
+      "tracking_no": "SF1234567890",
+      "placed_at": "2026-08-28",
+      "eta": "2026-09-03",
+      "items": [
+        {"name": "氮化镓 65W 快充充电器", "qty": 1, "price": 129.0},
+        {"name": "USB-C 编织数据线 1.5m", "qty": 2, "price": 29.0}
+      ],
+      "total": 187.0,
+      "address_city": "杭州",
+      "return_status": null
+    },
+    {
+      "order_id": "AT-10092",
+      "customer": "陈先生",
+      "status": "待发货",
+      "carrier": null,
+      "tracking_no": null,
+      "placed_at": "2026-09-01",
+      "eta": "预计 2026-09-04 前发货",
+      "items": [
+        {"name": "主动降噪蓝牙耳机 Pro", "qty": 1, "price": 499.0}
+      ],
+      "total": 499.0,
+      "address_city": "杭州",
+      "return_status": null
+    },
+    {
+      "order_id": "AT-10077",
+      "customer": "李女士",
+      "status": "已签收",
+      "carrier": "圆通速递",
+      "tracking_no": "YT9876543210",
+      "placed_at": "2026-08-10",
+      "eta": null,
+      "items": [
+        {"name": "磁吸手机壳（刻字定制款）", "qty": 1, "price": 89.0}
+      ],
+      "total": 89.0,
+      "address_city": "上海",
+      "return_status": null
+    },
+    {
+      "order_id": "AT-10099",
+      "customer": "赵先生",
+      "status": "已签收",
+      "carrier": "京东物流",
+      "tracking_no": "JD5566778899",
+      "placed_at": "2026-08-25",
+      "eta": null,
+      "items": [
+        {"name": "65W 氮化镓充电头", "qty": 1, "price": 129.0}
+      ],
+      "total": 129.0,
+      "address_city": "北京",
+      "return_status": null
+    },
+    {
+      "order_id": "AT-10050",
+      "customer": "王先生",
+      "status": "已签收",
+      "carrier": "中通快递",
+      "tracking_no": "ZT1122334455",
+      "placed_at": "2026-08-20",
+      "items": [
+        {"name": "20000mAh 移动电源", "qty": 1, "price": 199.0}
+      ],
+      "total": 199.0,
+      "address_city": "深圳",
+      "return_status": "退货处理中-已收到退货，等待质检"
+    }
+  ]
+}
