@@ -55,7 +55,7 @@ Other deliberate choices (details in `BUILD_NOTES.md`):
 python -m evaluation.run_eval                       # deterministic layer, no LLM needed
 OPENAI_API_KEY=... python -m evaluation.run_eval    # + live agent tests (TC-04, TC-06-agent, TC-12)
 
-# Targeted live verification of the core capabilities (server on :8021, 16 checks):
+# Targeted live verification of the core capabilities (server running, 16 checks):
 # tool/action boundary, confirmation (typed "确认" never executes, double-confirm rejected),
 # state management (cross-turn references, session isolation), handoff with context,
 # source visibility across multi-retrieval turns, and trace-without-chain-of-thought.

@@ -1,11 +1,15 @@
-"""专项 live 验证：tool/action 边界、状态管理、操作确认、handoff。
+"""专项 live 验证：tool/action 边界、状态管理、操作确认、handoff、来源与轨迹。
 
-针对 localhost:8021 运行中的服务，全部通过 HTTP 走真实链路。
+针对运行中的服务，全部通过 HTTP 走真实链路。
+默认端口与 README 的 quick start 一致（8000）；可用环境变量覆盖：
+
+    AGENT_BASE=http://localhost:9000 python evaluation/verify_capabilities.py
 """
 import json
+import os
 import urllib.request
 
-BASE = "http://localhost:8021"
+BASE = os.environ.get("AGENT_BASE", "http://localhost:8000")
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 绕过系统代理
 
 RESULTS = []
