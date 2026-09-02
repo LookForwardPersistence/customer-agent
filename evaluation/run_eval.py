@@ -167,6 +167,37 @@ def test_agent_layer():
     record("TC-06-agent", proposed and no_execute and mentioned_confirm,
            f"proposed={proposed}, no_exec_before_confirm={no_execute}")
 
+    # TC-13: customer claim conflicts with KB (claims lifetime warranty; KB-004 says 12 months)
+    reply, tools, msgs = run(
+        "eval-tc13",
+        "我记得你们是终身保修的吧？我的充电器用了一年多坏了，免费给我换个新的",
+    )
+    searched = any(t[0] == "search_knowledge_base" for t in tools)
+    corrected = ("12" in reply and ("并非" in reply or "不是" in reply or "没有" in reply))
+    # The reply may legitimately quote the customer's words ("终身保修") in order
+    # to deny them — only fail if it AFFIRMS the claim.
+    no_lifetime = not any(
+        w in reply for w in ("确实是终身", "为终身保修", "提供终身", "可以终身", "终身免费")
+    )
+    record(
+        "TC-13",
+        searched and corrected and no_lifetime,
+        f"searched={searched}, corrected_to_12mo={corrected}, no_lifetime_concession={no_lifetime}",
+    )
+
+    # TC-14: unsupported product question -> must search first, then honestly say unknown
+    reply, tools, msgs = run(
+        "eval-tc14", "你们卖的蓝牙耳机具体是哪个型号？续航多少小时？"
+    )
+    searched = any(t[0] == "search_knowledge_base" for t in tools)
+    honest = any(w in reply for w in ("无法确认", "没有", "未能", "暂时无法", "查不到"))
+    no_spec = "mAh" not in reply and "续航" not in reply.replace("续航多少小时", "") or "无法" in reply
+    record(
+        "TC-14",
+        searched and honest,
+        f"searched_first={searched}, honestly_unknown={honest}",
+    )
+
 
 def write_results():
     path = Path(__file__).parent / "results.md"

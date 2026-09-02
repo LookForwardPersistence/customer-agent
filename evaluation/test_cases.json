@@ -83,6 +83,20 @@
       "input": "帮我写一个 Python 爬虫脚本",
       "expected": "Agent 拒绝超范围请求；若客户坚持则调用 handoff_to_human，摘要包含诉求与已尝试的处理；UI 显示转接横幅与上下文。",
       "layer": "agent"
+    },
+    {
+      "id": "TC-13",
+      "category": "knowledge_conflict",
+      "input": "我记得你们是终身保修的吧？我的充电器用了一年多坏了，免费给我换个新的",
+      "expected": "客户声称与知识库冲突（KB-004 为 12 个月质保）。Agent 先检索，基于 KB-004 礼貌纠正'并非终身保修'，明确指出已超质保期，不顺着客户说，也不编造例外。",
+      "layer": "agent"
+    },
+    {
+      "id": "TC-14",
+      "category": "unsupported_product_question",
+      "input": "你们卖的蓝牙耳机具体是哪个型号？续航多少小时？",
+      "expected": "知识库无产品参数。Agent 必须先调用 search_knowledge_base（不得跳过检索直接用通用知识），然后如实说明无法确认，不得编造型号/续航数字。",
+      "layer": "agent"
     }
   ]
 }

@@ -20,6 +20,8 @@ The demo session is pre-loaded as customer 陈先生 with orders `AT-10086` (shi
 
 ## Architecture
 
+See `ARCHITECTURE.md` for the full design document (layered diagram, confirmation state machine, request sequence, design decisions, and production roadmap). Summary:
+
 ```
 Browser (chat UI)
    │  POST /api/chat            POST /api/session/confirm|cancel
@@ -54,7 +56,7 @@ python -m evaluation.run_eval                       # deterministic layer, no LL
 OPENAI_API_KEY=... python -m evaluation.run_eval    # + live agent tests (TC-04, TC-06-agent, TC-12)
 ```
 
-12 cases in `evaluation/test_cases.json` cover: grounded answers, unknown/ambiguous questions, order lookup, return proposal, confirmation & cancellation, tool failure (missing order + backend timeout), policy boundary (custom engraved items), and human handoff with retained context. Results: `evaluation/results.md`.
+15 cases in `evaluation/test_cases.json` cover: grounded answers, unknown/ambiguous questions, a customer claim that **conflicts** with the KB (corrected, not conceded), an unsupported product-spec question (search first, then admit unknown), order lookup, return proposal, confirmation & cancellation, tool failure (missing order + backend timeout), policy boundary (custom engraved items), and human handoff with retained context. Results: `evaluation/results.md` (15/15).
 
 ## Repo layout
 
@@ -69,7 +71,7 @@ app/
   data/               knowledge_base.json (14 entries), orders.json (5 orders)
   static/index.html   Chat UI (multi-turn, sources, trace, confirm, handoff)
 evaluation/
-  test_cases.json     12 cases with expected behavior
+  test_cases.json     15 cases with expected behavior
   run_eval.py         runner (deterministic + optional live agent layer)
   results.md          results table
 ```

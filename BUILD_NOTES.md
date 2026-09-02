@@ -10,7 +10,7 @@
 | Evaluation harness + 12 test cases + fixes | ~30 min |
 | README / build notes | ~15 min |
 
-AI coding tools (CodeBuddy/Claude) were used for scaffolding and boilerplate; all architectural decisions, the confirmation-guardrail design, the knowledge base content, and the evaluation cases were specified and verified by me. Deterministic evaluation (10/10) was run locally and verified against the actual outputs.
+AI coding tools (CodeBuddy/Claude) were used for scaffolding and boilerplate; all architectural decisions, the confirmation-guardrail design, the knowledge base content, and the evaluation cases were specified and verified by me. Deterministic evaluation was run locally and verified against the actual outputs.
 
 ## Intentionally NOT built (and why)
 
@@ -34,8 +34,8 @@ The agent *cannot* execute the return itself — `create_return` is deliberately
 
 ## Evaluation results
 
-`evaluation/results.md` — **13/13 passed**, including the live agent layer (DeepSeek `deepseek-chat`):
-TC-04 asks a clarifying question instead of guessing an order, TC-06-agent proposes the return end-to-end without executing, TC-12 refuses then hands off with a retained context summary.
+`evaluation/results.md` — **15/15 passed**, including the live agent layer (DeepSeek `deepseek-chat`):
+TC-04 asks a clarifying question instead of guessing an order, TC-06-agent proposes the return end-to-end without executing, TC-12 refuses then hands off with a retained context summary, TC-13 corrects a customer claim that conflicts with the KB (lifetime warranty vs 12-month policy), and TC-14 searches first on an unsupported product-spec question and admits it cannot confirm. TC-13/TC-14 were added after a dedicated re-verification of the grounding requirement, which also surfaced and fixed a gap: product-type questions previously skipped retrieval.
 
 ## Next three improvements
 
