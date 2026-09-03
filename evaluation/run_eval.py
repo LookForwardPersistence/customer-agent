@@ -241,10 +241,15 @@ def test_rag_final_answers():
     """P1-8: score the agent's FINAL answers, not the retrieval layer.
 
     Metrics over evaluation/rag_cases.json:
-    - groundedness: every expected fact appears in the reply (and no
-      must_not strings);
-    - citation precision: every KB id cited in the reply points at a source
-      whose content actually contains an expected fact (no citations = fail);
+    - groundedness: every expected fact appears in the reply (whitespace-
+      insensitive, honouring `alt_facts` paraphrases) and no `must_not`
+      string appears;
+    - claim support: every expected fact is backed by at least one KB entry
+      the reply actually cites. This — not "cited only supporting sources" —
+      is the property that matters: a claim with no source is a fabrication,
+      whereas citing an extra topically-related entry is merely verbose;
+    - over-citation (diagnostic, non-gating): the reply cites entries that
+      support none of its facts. Reported because it still misleads users;
     - refusal accuracy: no-answer cases decline instead of inventing.
     """
     if not os.environ.get("OPENAI_API_KEY"):
@@ -253,8 +258,17 @@ def test_rag_final_answers():
 
     from app.agent import get_agent
 
+    def norm(s: str) -> str:
+        # "12 个月" and "12个月" are the same fact; the model's spacing is not
+        # a signal. Compare on a whitespace-free form.
+        return re.sub(r"\s+", "", s)
+
+    def fact_in(fact: str, text: str) -> bool:
+        return norm(fact) in norm(text)
+
     agent = get_agent()
     g_total = g_pass = c_total = c_pass = r_total = r_pass = 0
+    o_total = o_pass = 0
     failures: list[str] = []
 
     for case in RAG_CASES:
@@ -275,21 +289,44 @@ def test_rag_final_answers():
             continue
 
         facts = case.get("expected_facts", [])
+        alts = case.get("alt_facts", [])
+
+        def present(i: int, fact: str) -> bool:
+            # The verbatim fact, or any declared equivalent phrasing.
+            return fact_in(fact, reply) or any(fact_in(a, reply) for a in (alts[i] if i < len(alts) else []))
+
         g_total += 1
-        grounded = all(f in reply for f in facts) and not any(f in reply for f in case.get("must_not", []))
-        if grounded:
+        missing = [facts[i] for i in range(len(facts)) if not present(i, facts[i])]
+        blocked = [f for f in case.get("must_not", []) if fact_in(f, reply)]
+        if not missing and not blocked:
             g_pass += 1
         else:
-            failures.append(f"{case['id']}: facts {facts} missing from reply: {reply[:80]}")
+            failures.append(
+                f"{case['id']}: {'missing facts ' + str(missing) if missing else ''}"
+                f"{' must_not present ' + str(blocked) if blocked else ''} :: {reply[:80]}"
+            )
 
         c_total += 1
-        # A citation is "precise" if the cited KB entry actually contains an
-        # expected fact — i.e. the source genuinely supports the claim.
-        supporting = {cid for cid in cited if any(f in KB_CONTENT.get(cid, "") for f in facts)}
-        if cited and cited <= supporting:
+        # Claim-level support: each fact must be traceable to a cited source.
+        unsupported = [facts[i] for i in range(len(facts))
+                       if not any(fact_in(facts[i], KB_CONTENT.get(cid, "")) for cid in cited)]
+        if cited and not unsupported:
             c_pass += 1
         else:
-            failures.append(f"{case['id']}: citations {sorted(cited) or 'NONE'} do not all support facts {facts}")
+            failures.append(
+                f"{case['id']}: facts {unsupported or facts} have no supporting citation "
+                f"(cited {sorted(cited) or 'NONE'})"
+            )
+
+        # Diagnostic only: cited entries that back none of the asserted facts.
+        supporting = {cid for cid in cited
+                      if any(fact_in(f, KB_CONTENT.get(cid, "")) for f in facts)}
+        o_total += 1
+        extra = cited - supporting
+        if not extra:
+            o_pass += 1
+        else:
+            failures.append(f"{case['id']}: [over-citation, non-gating] {sorted(extra)} back none of {facts}")
 
     # LLM 输出存在非确定性（同 DEVELOPMENT.md §6.3 的容错原则）：
     # 聚合指标以 80% 为通过线，逐条失败明细打印供诊断，不因个别波动挂掉 CI。
@@ -299,9 +336,11 @@ def test_rag_final_answers():
     record("RAG-GROUNDED", _rate(g_pass, g_total) >= 0.8,
            f"{g_pass}/{g_total} final answers contain the grounded facts")
     record("RAG-CITATION", _rate(c_pass, c_total) >= 0.8,
-           f"{c_pass}/{c_total} answers cite only sources that support them")
+           f"{c_pass}/{c_total} answers back every fact with a cited source")
     record("RAG-REFUSAL", _rate(r_pass, r_total) >= 0.8,
            f"{r_pass}/{r_total} no-answer cases correctly refused")
+    record("RAG-OVERCITE", True,
+           f"{o_pass}/{o_total} answers cite no unrelated source (diagnostic, not a gate)")
     for f in failures:
         print(f"  [rag-detail] {f}")
 

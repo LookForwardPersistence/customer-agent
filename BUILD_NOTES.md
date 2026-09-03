@@ -23,8 +23,8 @@ after the initial build, listed here for full transparency):
 | Action-lifecycle hardening: addressable `action_id`, CAS on confirm, proposal fingerprint, idempotency, `UNKNOWN` + read-back recovery, confirm-timeout sweeper | ~45 min |
 | Deterministic server-rendered execution replies + trusted `SystemMessage` channel (LLM never on the write path) | ~20 min |
 | XSS hardening (CSP, externalized JS, `textContent` rendering) + DOM behavior harness | ~30 min |
-| P0/P1 pytest regression suite (currently **56 tests**) | ~30 min |
-| Live agent-layer eval + RAG final-answer benchmark iterations | ~45 min |
+| P0/P1 pytest regression suite (currently **110 tests**) | ~30 min |
+| Live agent-layer eval + RAG final-answer benchmark (45 cases) | ~60 min |
 | Demo video + verification docs | ~30 min |
 
 ## Use of AI coding tools (and what I verified myself)
@@ -67,6 +67,29 @@ CSS, and first drafts of documentation.
   `sk-` strings)
 
 All fixes found this way are recorded in `REQUIREMENTS_VERIFICATION.md`.
+
+## Dependency management
+
+`uv.lock` is the source of truth (Python 3.12, pinned via `.python-version`;
+`requires-python = ">=3.12,<3.14"`). `requirements.txt` is a pinned export of
+it — including transitive dependencies at exact versions — so CI can install
+with plain `pip` and still get identical versions:
+
+```bash
+uv lock                                                              # re-resolve after editing pyproject.toml
+uv export --no-dev --no-hashes --no-emit-project -o requirements.txt  # regenerate the export
+uv lock --check                                                      # CI gate: lock matches pyproject
+```
+
+Both files are committed; changing a dependency requires re-running the export,
+which is exactly the kind of drift the `lockfile` CI job is there to catch.
+
+Verified locally: a clean virtualenv built from `requirements.txt` plus
+`pip install -e . --no-deps` runs the full suite (110 passed). One environment
+gotcha worth recording — on machines whose pip points at a PyPI *mirror*, the
+export may fail with "No matching distribution found", because mirrors lag the
+real index. That is a mirror problem, not a lockfile problem; `pip install -i
+https://pypi.org/simple -r requirements.txt` confirms it.
 
 ## Intentionally NOT built (and why)
 
@@ -139,11 +162,33 @@ cases and the RAG benchmark require `OPENAI_API_KEY`.
 | Tool / state machine | TC-05–TC-11 | PASS — query, propose, confirm, cancel, policy refusal, failures |
 | Agent (live LLM) | TC-04, TC-06-agent, TC-12, TC-13, TC-14 | PASS — clarify vs. guess, propose end-to-end with zero pre-confirm writes, refuse→handoff with retained context, correct a KB-conflicting claim, search-first + honest unknown |
 | Auth | TC-AUTH | PASS — cross-customer confirm rejected (409), other customer's order → `ORDER_NOT_FOUND` |
-| RAG final-answer benchmark | 3 metrics over 15 queries | PASS — groundedness, citation precision, refusal accuracy (threshold ≥ 80%) |
+| RAG final-answer benchmark | 4 metrics over **45 queries** | PASS — groundedness, claim-level citation support, refusal accuracy (threshold ≥ 80%), plus a non-gating over-citation diagnostic |
 
-Regression suite (`tests/`): **56 passed** in ~3 s (pytest; auth, action
+Regression suite (`tests/`): **110 passed** in ~3 s (pytest; auth, action
 lifecycle, idempotency/read-back, concurrency, XSS behavior via a DOM harness,
-demo reset, handoff payload structure).
+demo reset, handoff payload structure, RAG benchmark self-consistency).
+
+### Two RAG metric defects found by expanding to 45 cases
+
+The 15-case benchmark passed cleanly; at 45 cases it exposed two flaws in the
+scorer itself, both of which were scoring formatting rather than grounding:
+
+1. **Whitespace-sensitive fact matching.** The reply wrote「12个月质保」while the
+   fact string was「12 个月」— counted as an ungrounded answer. Spacing is not a
+   signal, so matching is now whitespace-insensitive, with per-case `alt_facts`
+   for genuine paraphrases（「无法再修改」≡「无法修改」）.
+2. **Citation precision was the wrong gate.** It failed any reply that cited an
+   extra topically-related entry (e.g. quoting delivery times when asked about
+   remote-area shipping fees). That is verbosity, not fabrication. The gate is
+   now **claim-level support** — every asserted fact must be backed by at least
+   one cited source — while over-citation is reported separately as a
+   diagnostic. A claim with no source is a fabrication; a chatty citation is not.
+
+Both properties are mechanically checkable, so `rag_cases.json` requires every
+`expected_fact` to be a verbatim substring of a cited KB entry, and
+`tests/test_p1_rag_cases.py` enforces that (plus full KB coverage and
+`alt_facts` alignment) on every run — the benchmark cannot silently drift out of
+sync with the knowledge base.
 
 TC-13/TC-14 exist because of a dedicated re-verification pass over the grounding
 requirement, which also found and fixed the skip-retrieval gap — the evaluation

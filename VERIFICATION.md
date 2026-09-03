@@ -144,16 +144,22 @@ uvicorn app.main:app --port 8000
 
 三轮验证，逐层收紧。**任一层失败即非零退出码**，可直接接 CI（见 `.github/workflows/ci.yml`）。
 
-```bash
-# ① 单元/集成测试：状态机、幂等、归属、XSS、handoff（不需要 LLM key，约 3 秒）
-python -m pytest tests evaluation -q          # 56 passed
+依赖由 `uv.lock` 锁定（Python 3.12，见 `.python-version`），每次安装版本一致；CI 会跑 `uv lock --check` 防漂移。
 
-# ② 评估套件：检索 / 工具 / 状态机 / agent live / RAG 最终答案（无 key 自动跳过 agent 层）
-python -m evaluation.run_eval                 # 19/19
+```bash
+uv sync --all-extras --dev
+```
+
+```bash
+# ① 单元/集成测试：状态机、幂等、并发、归属、token、XSS、handoff、RAG 用例自洽
+uv run python -m pytest tests evaluation -q      # 110 passed（无需 key，约 3 秒）
+
+# ② 评估套件：检索 / 工具 / 状态机 / agent live / RAG 最终答案 45 条
+uv run python -m evaluation.run_eval             # 20/20（无 key 自动退回确定性层）
 
 # ③ HTTP 级能力验证：打真实端口，覆盖浏览器→服务端完整链路
-uvicorn app.main:app --port 8000 &
-python evaluation/verify_capabilities.py      # 16/16（AGENT_BASE 可指定端口）
+uv run python -m uvicorn app.main:app --port 8000 &
+uv run python evaluation/verify_capabilities.py  # 16/16（AGENT_BASE 可指定端口）
 ```
 
 每次运行 ②都会生成**不覆盖**的结果文件，附带 run_id / commit / python / model / base_url 便于跨次对比：
@@ -182,11 +188,13 @@ grep -n "create_return" app/main.py      # 仅在 /api/session/confirm（UI 按�
 
 | 验证层 | 覆盖 | 结果 |
 | --- | --- | --- |
-| ① pytest（`tests/`） | 状态机 / 幂等 / 并发 / 订单归属 / token / XSS（静态+DOM 行为）/ handoff 结构化 | **56/56 PASS** |
-| ② 评估套件（`run_eval`） | TC-01~TC-14（检索·工具·状态机·agent live）+ TC-AUTH + RAG 最终答案 3 项指标 | **19/19 PASS** |
+| ① pytest（`tests/`） | 状态机 / 幂等 / 并发 / 订单归属 / token / XSS（静态+DOM 行为）/ handoff 结构化 / RAG 用例自洽 | **110/110 PASS** |
+| ② 评估套件（`run_eval`） | TC-01~TC-14（检索·工具·状态机·agent live）+ TC-AUTH + RAG 45 条 4 项指标 | **20/20 PASS** |
 | ③ HTTP 能力验证（`verify_capabilities.py`） | 边界 1 / 确认 5 / 状态 4 / handoff 3 / 来源与轨迹 3，打真实端口 | **16/16 PASS** |
 | 手动场景 | 本文档第 1 节 A–I | 按上述步骤复现 |
 
-RAG 指标中 RAG-CITATION 为 11/12（阈值 80%）：RAG-09 引用了未支撑该结论的 KB 条目，属多跳问答的引用精度问题，已记录在结果文件中未掩盖。
+RAG 指标明细（45 条查询）：groundedness 40/40、claim-level citation support 40/40、refusal 5/5，均过 80% 线；over-citation **36/40** 为**非阻断诊断**——4 条回答多引了一条相关但不含该论断的 KB（如问偏远地区运费时顺带引了配送时效），属啰嗦而非编造。
+
+扩容到 45 条时暴露了评分器自身的两个缺陷（都已修）：事实匹配原先对空格敏感（「12个月」≠「12 个月」被判无据）；引用精度原先把"多引一条相关来源"也算失败。判据已改为**论断级支撑**（每个论断至少有一个被引用来源兜底），多引则单独报告。详见 `BUILD_NOTES.md`。
 
 需求符合性的逐条核对（含交付物核验与已知局限）见 `REQUIREMENTS_VERIFICATION.md`。

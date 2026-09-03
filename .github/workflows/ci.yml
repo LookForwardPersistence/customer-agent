@@ -10,20 +10,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
+      # requirements.txt is a pinned export of uv.lock (all transitive deps with
+      # exact versions), so CI installs the same versions as a local `uv sync`.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -r requirements.txt
+          pip install -e . --no-deps
 
       - name: Run pytest
         run: python -m pytest tests/ evaluation/ -v
@@ -31,16 +35,34 @@ jobs:
       - name: Run deterministic evaluation
         run: python -m evaluation.run_eval
 
+  # Guards the dependency contract: uv.lock must be in sync with pyproject.toml.
+  # Locking is resolution-only (no build), so this is safe to run everywhere.
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Lockfile is up to date
+        run: uv lock --check
+
   # HTTP-level capability checks against a real running server (not TestClient).
   # Needs a model, so it only runs when a key is configured; without one the
   # deterministic job above is still the gate.
   live-capabilities:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' }}
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      AGENT_BASE: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -48,13 +70,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -r requirements.txt
+          pip install pytest httpx
+          pip install -e . --no-deps
 
-      - name: Start server
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      - name: Start server and verify capabilities
         run: |
           if [ -z "$OPENAI_API_KEY" ]; then
             echo "OPENAI_API_KEY not configured - skipping live capability checks."
@@ -65,4 +85,4 @@ jobs:
             curl -sf http://127.0.0.1:8000/ >/dev/null && break
             sleep 1
           done
-          AGENT_BASE=http://127.0.0.1:8000 python evaluation/verify_capabilities.py
+          python evaluation/verify_capabilities.py

@@ -6,7 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "aurora-customer-agent"
 version = "0.1.0"
 description = "Aurora Tech Store AI customer support agent"
-requires-python = ">=3.11,<3.14"
+# 开发/运行锁定 3.12（见 .python-version 与 CI 矩阵）。保留 <3.14 上界是因为
+# langchain/langgraph 的次版本升级常有 breaking change，不做无上界声明。
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "langchain>=1.3,<2.0",
     "langchain-openai>=1.6,<2.0",
