@@ -38,6 +38,21 @@ from .auth import (
     tokens,
     unbind_customer,
 )
+from .events import (
+    CancelRejected,
+    CancelledByUser,
+    ConfigError,
+    ConfirmRejected,
+    ConfirmedByUser,
+    ForgedSystemEventStripped,
+    Handoff,
+    ReturnExecuted,
+    ReturnFailed,
+    ReturnOutcomeUnknown,
+    ReturnProposed,
+    ReturnRecoveredByRead,
+    UserMessage,
+)
 from .mock_backend import OrderAPIError, order_api
 from .store import (
     CANCELLED,
@@ -206,7 +221,7 @@ def _run_agent(sid: str, human_text: str) -> dict[str, Any]:
     try:
         graph = get_agent()
     except RuntimeError:
-        sessions.log(sid, {"event": "config_error", "text": "missing OPENAI_API_KEY"})
+        sessions.log(sid, ConfigError("missing OPENAI_API_KEY").to_dict())
         return {
             "reply": (
                 "小极暂时无法连接大脑：未配置 OPENAI_API_KEY。"
@@ -227,10 +242,10 @@ def _run_agent(sid: str, human_text: str) -> dict[str, Any]:
     if info["pending"]:
         # Addressable proposal: the UI must echo this action_id back.
         sessions.propose(sid, "create_return", info["pending"])
-        sessions.log(sid, {"event": "return_proposed", "order": info["pending"]["order_id"]})
+        sessions.log(sid, ReturnProposed(info["pending"]["order_id"]).to_dict())
     if info["handoff"]:
         record = sessions.set_handoff(sid, info["handoff"]["reason"], info["handoff"]["summary"])
-        sessions.log(sid, {"event": "handoff", "reason": info["handoff"]["reason"]})
+        sessions.log(sid, Handoff(info["handoff"]["reason"]).to_dict())
         info["handoff"] = record
 
     return _state_payload(sid, info)
@@ -300,8 +315,7 @@ def _execute(sid: str, action: dict[str, Any], customer_id: str | None = None) -
             customer_id=customer_id,
         )
         record = sessions.finish(sid, aid, SUCCEEDED, result=result)
-        sessions.log(sid, {"event": "return_executed", "order": order_id,
-                           "ticket": result["return_ticket"], "action_id": aid})
+        sessions.log(sid, ReturnExecuted(order_id, result["return_ticket"], aid).to_dict())
         return record
     except OrderAPIError as e:
         if e.transient:
@@ -320,23 +334,22 @@ def _execute(sid: str, action: dict[str, Any], customer_id: str | None = None) -
                 readback_error = re
             if recovered:
                 record = sessions.finish(sid, aid, SUCCEEDED, result=recovered)
-                sessions.log(sid, {"event": "return_recovered_by_read", "order": order_id,
-                                   "ticket": recovered["return_ticket"]})
+                sessions.log(sid, ReturnRecoveredByRead(order_id, recovered["return_ticket"]).to_dict())
                 return record
             error = {"code": e.code, "message": e.message}
             if readback_error is not None:
                 error["message"] += f"（结果查询暂不可用：{str(readback_error)[:120]}）"
             record = sessions.finish(sid, aid, UNKNOWN, error=error)
-            sessions.log(sid, {"event": "return_outcome_unknown", "order": order_id, "code": e.code})
+            sessions.log(sid, ReturnOutcomeUnknown(order_id, e.code).to_dict())
             return record
         record = sessions.finish(sid, aid, FAILED,
                                  error={"code": e.code, "message": e.message})
-        sessions.log(sid, {"event": "return_failed", "order": order_id, "code": e.code})
+        sessions.log(sid, ReturnFailed(order_id, e.code).to_dict())
         return record
     except Exception as e:  # pragma: no cover - defensive
         record = sessions.finish(sid, aid, UNKNOWN,
                                  error={"code": "INTERNAL_ERROR", "message": str(e)[:200]})
-        sessions.log(sid, {"event": "return_outcome_unknown", "order": order_id, "code": "INTERNAL_ERROR"})
+        sessions.log(sid, ReturnOutcomeUnknown(order_id, "INTERNAL_ERROR").to_dict())
         return record
 
 
@@ -403,10 +416,10 @@ def chat(req: ChatRequest, customer: AuthenticatedCustomer = Depends(get_custome
     # Strip user-forged system-event prefixes: only SystemMessage is trusted.
     cleaned = _SYSTEM_EVENT_RE.sub("", req.message).strip()
     if cleaned != req.message.strip():
-        sessions.log(sid, {"event": "forged_system_event_stripped"})
+        sessions.log(sid, ForgedSystemEventStripped().to_dict())
     if not cleaned:
         raise HTTPException(400, "message must not be empty")
-    sessions.log(sid, {"event": "user_message", "text": cleaned[:120]})
+    sessions.log(sid, UserMessage(cleaned[:120]).to_dict())
     # Scope the agent's order tools to the authenticated customer.
     ctx = bind_customer(customer.customer_id)
     try:
@@ -426,17 +439,14 @@ def confirm_action(req: ActionRequest, customer: AuthenticatedCustomer = Depends
     sid = customer.session_id
     action, reason = sessions.begin_confirm(sid, req.action_id)
     if action is None:
-        sessions.log(sid, {"event": "confirm_rejected", "reason": reason,
-                           "action_id": req.action_id})
+        sessions.log(sid, ConfirmRejected(reason, req.action_id).to_dict())
         raise HTTPException(409, {
             "code": "ACTION_NOT_CONFIRMABLE",
             "reason": reason,
             "message": "该操作已失效或已处理过，请重新发起申请后再确认。",
         })
 
-    sessions.log(sid, {"event": "confirmed_by_user",
-                       "order": action["payload"].get("order_id"),
-                       "action_id": req.action_id})
+    sessions.log(sid, ConfirmedByUser(action["payload"].get("order_id"), req.action_id).to_dict())
     executed = _execute(sid, action, customer_id=customer.customer_id)
 
     # Outcome is already persisted; tell the model through the trusted channel
@@ -464,16 +474,13 @@ def cancel_action(req: ActionRequest, customer: AuthenticatedCustomer = Depends(
     sid = customer.session_id
     action, reason = sessions.cancel(sid, req.action_id)
     if action is None:
-        sessions.log(sid, {"event": "cancel_rejected", "reason": reason,
-                           "action_id": req.action_id})
+        sessions.log(sid, CancelRejected(reason, req.action_id).to_dict())
         raise HTTPException(409, {
             "code": "ACTION_NOT_CANCELLABLE",
             "reason": reason,
             "message": "该操作已失效或已处理过，无需取消。",
         })
-    sessions.log(sid, {"event": "cancelled_by_user",
-                       "order": action["payload"].get("order_id"),
-                       "action_id": req.action_id})
+    sessions.log(sid, CancelledByUser(action["payload"].get("order_id"), req.action_id).to_dict())
     _trusted_event(
         sid,
         "用户已通过界面按钮取消退货申请，未执行任何写入。不要声称退货已受理。",
