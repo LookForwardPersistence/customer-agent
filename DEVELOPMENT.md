@@ -382,7 +382,9 @@ python -m evaluation.run_eval                        # 确定性层（无需 key
 OPENAI_API_KEY=... python -m evaluation.run_eval     # + agent 层 live 用例 + RAG 答案质量指标
 ```
 
-Runner 顶层 `load_dotenv()`；结束后自动重写 `results.md`（表格 + 覆盖映射）。
+Runner 顶层 `load_dotenv()`；结束后生成带 run\_id 的时间戳快照
+（`results_<run_id>_live.md` + `.jsonl`，不覆盖旧结果，便于跨次 diff）。
+最近一次通过的完整结果固化在 `results.md`。
 
 | 层                     | 用例                         | 断言方式                                                                      |
 | --------------------- | -------------------------- | ------------------------------------------------------------------------- |

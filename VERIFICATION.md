@@ -165,9 +165,11 @@ uv run python evaluation/verify_capabilities.py  # 16/16（AGENT_BASE 可指定�
 每次运行 ②都会生成**不覆盖**的结果文件，附带 run_id / commit / python / model / base_url 便于跨次对比：
 
 ```text
-evaluation/results_20260903_001634_live.md      # 人读
-evaluation/results_20260903_001634_live.jsonl   # 机读，逐条留痕，可 diff
+evaluation/results_<run_id>_live.md      # 人读（带时间戳快照，不入库）
+evaluation/results_<run_id>_live.jsonl   # 机读，逐条留痕，可 diff
 ```
+
+最近一次通过的完整结果已固化在 `evaluation/results.md`（20/20，含运行元数据）。
 
 无 key 时 ①照常全绿、②退回确定性层（文件后缀变 `_nokey`）、③中依赖 LLM 的用例会失败——这是预期的，CI 里 ③ 仅在配置了 key 的 push 上跑。
 

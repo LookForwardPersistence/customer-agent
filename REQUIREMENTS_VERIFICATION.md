@@ -2,7 +2,7 @@
 
 > 对照 `2026_wati-customer-agent-engineer-assignment.pdf`（作业原题）逐条核验
 > 核验时间：2026-09-02 · 核验方式：代码静态核查 + 服务 live 实测
-> 自动化证据：`evaluation/results.md`（15/15）+ `evaluation/verify_capabilities.py`（16/16）
+> 自动化证据：`evaluation/results.md`（20/20）+ `evaluation/verify_capabilities.py`（16/16）
 
 ---
 
