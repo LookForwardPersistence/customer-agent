@@ -202,33 +202,42 @@ class MockOrderAPI:
         """Executes the return request. Called ONLY after user confirmation.
 
         - `idempotency_key`: replaying the same confirmation returns the same
-          ticket instead of creating a second return.
+          ticket instead of creating a second return (request-replay key).
         - `expected_fingerprint`: the proposal the user actually saw. A mismatch
           means the order changed under them -> refuse (STALE_PROPOSAL).
         - `customer_id`: the authenticated owner; a mismatch refuses the write.
+        - Business uniqueness: validation (no active return) and creation share
+          ONE atomic critical section. Two different sessions/actions racing to
+          return the same order cannot both succeed — the second gets
+          ORDER_ALREADY_RETURNED. The idempotency key alone cannot guarantee
+          this: it only de-duplicates the *same* action.
         """
-        # Idempotent replay first: never touch state on a retry.
-        if idempotency_key and idempotency_key in self._idempotency:
-            return self._idempotency[idempotency_key]
-
-        proposal = self.validate_return(order_id, reason, customer_id)  # may raise
-
-        if expected_fingerprint and expected_fingerprint != proposal["fingerprint"]:
-            raise OrderAPIError(
-                "STALE_PROPOSAL",
-                "订单信息在您确认前已发生变化，该退货方案已失效，请重新申请后再确认。",
-            )
-
-        if order_id == "AT-10099":
-            # Injected transient failure: outcome is UNKNOWN, not "failed".
-            # Callers must not retry blindly; they should re-read the order.
-            raise OrderAPIError(
-                "BACKEND_TIMEOUT",
-                "退货系统暂时不可用，请稍后重试或转人工处理。",
-                transient=True,
-            )
-
+        # The whole check-then-act sequence runs under the lock: idempotent
+        # replay, ownership, no-active-return, fingerprint and creation.
+        # (validate_return only reads state and never takes the lock itself,
+        # so there is no re-entrancy problem.)
         with self._lock:
+            # Idempotent replay first: never touch state on a retry.
+            if idempotency_key and idempotency_key in self._idempotency:
+                return self._idempotency[idempotency_key]
+
+            proposal = self.validate_return(order_id, reason, customer_id)  # may raise
+
+            if expected_fingerprint and expected_fingerprint != proposal["fingerprint"]:
+                raise OrderAPIError(
+                    "STALE_PROPOSAL",
+                    "订单信息在您确认前已发生变化，该退货方案已失效，请重新申请后再确认。",
+                )
+
+            if order_id == "AT-10099":
+                # Injected transient failure: outcome is UNKNOWN, not "failed".
+                # Callers must not retry blindly; they should re-read the order.
+                raise OrderAPIError(
+                    "BACKEND_TIMEOUT",
+                    "退货系统暂时不可用，请稍后重试或转人工处理。",
+                    transient=True,
+                )
+
             ticket = "RT-" + uuid.uuid4().hex[:8].upper()
             self._returns[ticket] = {**proposal, "created_at": time.strftime("%Y-%m-%d %H:%M")}
             order = self._db[order_id]

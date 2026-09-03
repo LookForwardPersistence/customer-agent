@@ -30,3 +30,39 @@ jobs:
 
       - name: Run deterministic evaluation
         run: python -m evaluation.run_eval
+
+  # HTTP-level capability checks against a real running server (not TestClient).
+  # Needs a model, so it only runs when a key is configured; without one the
+  # deterministic job above is still the gate.
+  live-capabilities:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Start server
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY not configured - skipping live capability checks."
+            exit 0
+          fi
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/ >/dev/null && break
+            sleep 1
+          done
+          AGENT_BASE=http://127.0.0.1:8000 python evaluation/verify_capabilities.py

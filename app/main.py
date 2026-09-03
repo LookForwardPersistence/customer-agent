@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +49,33 @@ from .store import (
     sessions,
 )
 
-app = FastAPI(title="Aurora Tech Store Customer Agent")
+# ---------------------------------------------------------------------------
+# CONFIRMING watchdog: a dispatched action must never be stuck forever.
+# Startup recovery + periodic sweep move stale CONFIRMING -> UNKNOWN, so a
+# crashed/mid-flight confirmation degrades to the query-only recovery path
+# instead of permanently answering "already_confirming". (With in-memory state
+# a restart empties the store; the sweeper mainly guards long-lived processes
+# and future persistent stores.)
+# ---------------------------------------------------------------------------
+SWEEP_INTERVAL_SECONDS = 10
+
+
+def _confirm_sweeper_loop(stop: threading.Event) -> None:
+    while not stop.wait(SWEEP_INTERVAL_SECONDS):
+        sessions.sweep_stale_confirming()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    sessions.sweep_stale_confirming()  # startup recovery pass
+    stop = threading.Event()
+    worker = threading.Thread(target=_confirm_sweeper_loop, args=(stop,), daemon=True)
+    worker.start()
+    yield
+    stop.set()
+
+
+app = FastAPI(title="Aurora Tech Store Customer Agent", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -277,14 +305,27 @@ def _execute(sid: str, action: dict[str, Any], customer_id: str | None = None) -
     except OrderAPIError as e:
         if e.transient:
             # Outcome unknown — resolve with a READ, never a blind retry.
-            recovered = order_api.get_return(order_id, customer_id=customer_id)
+            # The readback itself can fail too (e.g. the read path is also
+            # down). It MUST NOT propagate: an exception inside this except
+            # block would 500 the request and leave the action stuck in
+            # CONFIRMING forever (every later confirm rejected with
+            # already_confirming). Any readback failure degrades to UNKNOWN,
+            # which is the safe state: recovery is query-only, never a re-write.
+            recovered = None
+            readback_error: Exception | None = None
+            try:
+                recovered = order_api.get_return(order_id, customer_id=customer_id)
+            except Exception as re:  # noqa: BLE001 - degraded readback path
+                readback_error = re
             if recovered:
                 record = sessions.finish(sid, aid, SUCCEEDED, result=recovered)
                 sessions.log(sid, {"event": "return_recovered_by_read", "order": order_id,
                                    "ticket": recovered["return_ticket"]})
                 return record
-            record = sessions.finish(sid, aid, UNKNOWN,
-                                     error={"code": e.code, "message": e.message})
+            error = {"code": e.code, "message": e.message}
+            if readback_error is not None:
+                error["message"] += f"（结果查询暂不可用：{str(readback_error)[:120]}）"
+            record = sessions.finish(sid, aid, UNKNOWN, error=error)
             sessions.log(sid, {"event": "return_outcome_unknown", "order": order_id, "code": e.code})
             return record
         record = sessions.finish(sid, aid, FAILED,

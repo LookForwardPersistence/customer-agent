@@ -49,6 +49,19 @@ CONFIRMABLE_STATES = {PROPOSED}
 
 PROPOSAL_TTL_SECONDS = 15 * 60
 
+# A dispatched-but-unresolved action (CONFIRMING) older than this is swept to
+# UNKNOWN: the request handler died mid-execution (crash, unhandled exception,
+# worker killed). UNKNOWN is the safe state — recovery is query-only.
+CONFIRM_TIMEOUT_SECONDS = 30
+
+# Allowed transitions out of CONFIRMING. The write was already dispatched, so
+# the only legal outcomes are success / failure / unknown. Cancelling or
+# re-proposing a confirming action must go through explicit rejection paths.
+CONFIRMING_EXITS = {SUCCEEDED, FAILED, UNKNOWN}
+# UNKNOWN may later be resolved by a read (SUCCEEDED) or a definitive
+# negative confirmation (FAILED), but never back to CONFIRMABLE states.
+UNKNOWN_EXITS = {SUCCEEDED, FAILED}
+
 
 def payload_hash(payload: dict[str, Any]) -> str:
     """Stable fingerprint of what the user was shown at proposal time."""
@@ -145,7 +158,13 @@ class SessionStore:
         result: dict[str, Any] | None = None,
         error: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Persist the outcome. First write wins (idempotent replay)."""
+        """Persist the outcome. First write wins (idempotent replay).
+
+        Transition rules: CONFIRMING may only resolve to SUCCEEDED / FAILED /
+        UNKNOWN; UNKNOWN may only be resolved by a read (SUCCEEDED) or a
+        definitive negative result (FAILED). Anything else is a programming
+        error and is rejected, leaving the stored state untouched.
+        """
         with self._lock:
             s = self._sessions.get(sid)
             action = s["actions"].get(action_id) if s else None
@@ -153,11 +172,41 @@ class SessionStore:
                 return None
             if action["state"] in TERMINAL_STATES and action.get("result") is not None:
                 return dict(action)  # replay: return the original outcome
+            if action["state"] == CONFIRMING and state not in CONFIRMING_EXITS:
+                return None
+            if action["state"] == UNKNOWN and state not in UNKNOWN_EXITS:
+                return None
             action["state"] = state
             action["result"] = result
             action["error"] = error
             action["closed_at"] = time.time()
             return dict(action)
+
+    def sweep_stale_confirming(self, now: float | None = None) -> list[str]:
+        """Resolve CONFIRMING actions that outlived CONFIRM_TIMEOUT_SECONDS.
+
+        Called at startup (recovery for actions orphaned by a crash) and
+        periodically by a background sweeper. The swept action becomes UNKNOWN
+        with code CONFIRM_TIMEOUT — never retried automatically: the write may
+        have landed, and recovery is a read (get_return), not a re-write.
+        """
+        now = time.time() if now is None else now
+        swept: list[str] = []
+        with self._lock:
+            for s in self._sessions.values():
+                for a in s["actions"].values():
+                    if a["state"] != CONFIRMING:
+                        continue
+                    dispatched_at = a.get("dispatched_at") or a.get("created_at") or now
+                    if now - dispatched_at > CONFIRM_TIMEOUT_SECONDS:
+                        a["state"] = UNKNOWN
+                        a["error"] = {
+                            "code": "CONFIRM_TIMEOUT",
+                            "message": "确认处理超时，执行结果未知，请通过查询核实，勿重复提交。",
+                        }
+                        a["closed_at"] = now
+                        swept.append(a["action_id"])
+        return swept
 
     def cancel(self, sid: str, action_id: str) -> tuple[dict[str, Any] | None, str | None]:
         with self._lock:

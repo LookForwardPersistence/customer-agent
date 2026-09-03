@@ -3,3 +3,13 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+.pytest_cache/
+*.egg-info/
+
+# 生成物：每次评估运行都会带 run_id 新写一份，不入版本库（保留 results.md 作为快照）
+evaluation/results_*_live.md
+evaluation/results_*_live.jsonl
+
+# 大文件：作业原题与演示视频不随仓库分发
+*.pdf
+*.mp4

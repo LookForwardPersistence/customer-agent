@@ -24,6 +24,12 @@ dev = [
     "httpx>=0.27",
 ]
 
+[tool.setuptools.packages.find]
+include = ["app*", "evaluation*"]
+
+[tool.setuptools.package-data]
+app = ["data/*.json", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "evaluation"]
 pythonpath = ["."]

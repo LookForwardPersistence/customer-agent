@@ -52,8 +52,8 @@ RESULTS: list[dict] = []
 REFUSAL_MARKERS = ("无法确认", "无法", "暂时不能", "没有找到", "未能确认", "未能查到")
 
 
-def record(tc_id: str, passed: bool, detail: str):
-    RESULTS.append({"id": tc_id, "passed": passed, "detail": detail})
+def record(tc_id: str, passed: bool, detail: str, layer: str = ""):
+    RESULTS.append({"id": tc_id, "passed": passed, "detail": detail, "layer": layer})
     print(f"{'PASS' if passed else 'FAIL'}  {tc_id}  {detail}")
 
 
@@ -316,6 +316,8 @@ def gather_metadata() -> dict:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "commit": sha,
+        "model": os.environ.get("OPENAI_MODEL", "unset"),
+        "base_url": os.environ.get("OPENAI_BASE_URL", "unset"),
         "openai_key_set": bool(os.environ.get("OPENAI_API_KEY")),
         "runner": "evaluation/run_eval.py",
     }
@@ -340,8 +342,11 @@ def write_results():
         f"- timestamp: {meta['timestamp']}",
         f"- python: {meta['python']}",
         f"- commit: {meta['commit']}",
+        f"- model: {meta['model']}",
+        f"- base_url: {meta['base_url']}",
         f"- openai_key_set: {meta['openai_key_set']}",
         f"- run_id: {run_id}_{suffix}",
+        f"- machine-readable: `results_{run_id}_{suffix}.jsonl`",
         "",
         "| Case | Result | Detail |",
         "| --- | --- | --- |",
@@ -366,6 +371,15 @@ def write_results():
         "(RAG-GROUNDED / RAG-CITATION / RAG-REFUSAL) require `OPENAI_API_KEY`.",
     ]
     out_path.write_text("\n".join(lines), encoding="utf-8")
+
+    # Machine-readable twin: one JSON object per line (run header + each case).
+    # Different runs never overwrite each other, so runs can be diffed in CI.
+    jsonl_path = out_path.with_suffix(".jsonl")
+    with jsonl_path.open("w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"type": "run", "run_id": f"{run_id}_{suffix}", **meta}, ensure_ascii=False) + "\n")
+        for r in RESULTS:
+            fh.write(json.dumps({"type": "case", "run_id": f"{run_id}_{suffix}", **r}, ensure_ascii=False) + "\n")
+
     print(f"\nWrote {out_path} ({passed}/{total} passed)")
     return passed, total
 
