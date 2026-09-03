@@ -183,7 +183,7 @@ class SessionStore:
     def log(sid, event) -> None                         # 审计事件追加
     def snapshot(sid) -> dict                           # {pending_action, handoff, events, actions}
 
-sessions = SessionStore()   # 线程安全（threading.Lock）；存储走 StateBackend（默认 SQLite，可 PERSISTENCE=memory）
+sessions = SessionStore()   # 线程安全（threading.Lock），进程内存
 ```
 
 **结构化 HandoffPayload（P1-6）**——`set_handoff` 时服务端从审计事件确定性生成：
@@ -382,9 +382,7 @@ python -m evaluation.run_eval                        # 确定性层（无需 key
 OPENAI_API_KEY=... python -m evaluation.run_eval     # + agent 层 live 用例 + RAG 答案质量指标
 ```
 
-Runner 顶层 `load_dotenv()`；结束后生成带 run\_id 的时间戳快照
-（`results_<run_id>_live.md` + `.jsonl`，不覆盖旧结果，便于跨次 diff）。
-最近一次通过的完整结果固化在 `results.md`。
+Runner 顶层 `load_dotenv()`；结束后自动重写 `results.md`（表格 + 覆盖映射）。
 
 | 层                     | 用例                         | 断言方式                                                                      |
 | --------------------- | -------------------------- | ------------------------------------------------------------------------- |
@@ -483,12 +481,12 @@ uvicorn app.main:app --reload --port 8000
 
 ## 8. 扩展开发指引
 
-| 需求           | 改动点                                                                                         | 不动的部分       |
-| ------------ | ------------------------------------------------------------------------------------------- | ----------- |
-| 换真实 OMS      | 实现 `OrderAPI` Protocol（含 `customer_id` 归属语义），改 `order_api =` 一行                             | 工具/agent/前端 |
-| 换向量检索        | 重写 `KnowledgeBase.search()` 同签名                                                             | 其余全部        |
-| 新增客户操作（如改地址） | 复制 propose/confirm 模式：提议工具 + `sessions.propose(新 type)` + confirm 端点分支                      | 架构不变        |
-| 多机持久化        | SQLite（已默认）→ 实现 `StateBackend` 的 Redis/Postgres 版；checkpointer 同理换 SqliteSaver → RedisSaver | 接口契约不变      |
-| 换真实鉴权        | `get_customer` 依赖改为校验 JWT/网关身份，`AuthenticatedCustomer` 结构不变                                 | 端点/工具层      |
-| 接真实工单系统      | `set_handoff` 处改为调用工单 API，`HandoffPayload` 直接映射 ticket 字段                                   | 前端横幅结构不变    |
+| 需求           | 改动点                                                                    | 不动的部分       |
+| ------------ | ---------------------------------------------------------------------- | ----------- |
+| 换真实 OMS      | 实现 `OrderAPI` Protocol（含 `customer_id` 归属语义），改 `order_api =` 一行        | 工具/agent/前端 |
+| 换向量检索        | 重写 `KnowledgeBase.search()` 同签名                                        | 其余全部        |
+| 新增客户操作（如改地址） | 复制 propose/confirm 模式：提议工具 + `sessions.propose(新 type)` + confirm 端点分支 | 架构不变        |
+| 持久化会话        | MemorySaver → Redis/Postgres checkpointer；SessionStore/TokenService 落库 | 接口契约不变      |
+| 换真实鉴权        | `get_customer` 依赖改为校验 JWT/网关身份，`AuthenticatedCustomer` 结构不变            | 端点/工具层      |
+| 接真实工单系统      | `set_handoff` 处改为调用工单 API，`HandoffPayload` 直接映射 ticket 字段              | 前端横幅结构不变    |
 

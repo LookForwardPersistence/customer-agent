@@ -65,7 +65,8 @@ def test_new_session_unknown_customer(client):
 def test_message_too_long_rejected(client):
     s = _new_session(client)
     r = client.post("/api/chat", json={"message": "x" * 2001}, headers=_hdr(s["token"]))
-    assert r.status_code == 400
+    # Enforced at the schema layer since P2-4 (was a manual 400 in the handler).
+    assert r.status_code == 422
 
 
 def test_confirm_requires_action_id(client):

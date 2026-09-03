@@ -142,10 +142,23 @@ class Handoff(TraceEvent):
     reason: str
 
 
+@dataclass(frozen=True)
+class AgentDegraded(TraceEvent):
+    """LLM channel failed (timeout / connection / provider error).
+
+    The reply is then rendered by the server (deterministic fallback), so the
+    user is never left hanging and the failure stays auditable.
+    """
+
+    KIND = "agent_degraded"
+    code: str
+
+
 ALL_EVENT_TYPES: tuple[type[TraceEvent], ...] = (
     UserMessage,
     ForgedSystemEventStripped,
     ConfigError,
+    AgentDegraded,
     ReturnProposed,
     ConfirmedByUser,
     ConfirmRejected,

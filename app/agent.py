@@ -41,6 +41,9 @@ SYSTEM_PROMPT = """你是小极，Aurora Tech Store（极光科技配件店，�
 """
 
 
+DEFAULT_LLM_TIMEOUT_SECONDS = 60.0
+
+
 def build_model():
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -48,11 +51,18 @@ def build_model():
             "OPENAI_API_KEY is not set. Copy .env.example to .env and fill it in "
             "(any OpenAI-compatible provider works via OPENAI_BASE_URL)."
         )
+    timeout = float(os.environ.get("LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS))
     return ChatOpenAI(
         model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
         api_key=api_key,
         base_url=os.environ.get("OPENAI_BASE_URL") or None,
         temperature=0.2,
+        # Circuit breaker for the LLM channel: without an explicit timeout a
+        # hung provider would hold the chat request (and its threadpool slot)
+        # forever. One retry covers transient blips; more would just multiply
+        # the worst-case latency.
+        request_timeout=timeout,
+        max_retries=1,
     )
 
 
