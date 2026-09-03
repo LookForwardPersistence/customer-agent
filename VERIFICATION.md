@@ -152,7 +152,7 @@ uv sync --all-extras --dev
 
 ```bash
 # ① 单元/集成测试：状态机、幂等、并发、归属、token、XSS、handoff、RAG 用例自洽
-uv run python -m pytest tests evaluation -q      # 110 passed（无需 key，约 3 秒）
+uv run python -m pytest tests evaluation -q      # 126 passed（无需 key，约 3 秒）
 
 # ② 评估套件：检索 / 工具 / 状态机 / agent live / RAG 最终答案 45 条
 uv run python -m evaluation.run_eval             # 20/20（无 key 自动退回确定性层）
@@ -188,7 +188,7 @@ grep -n "create_return" app/main.py      # 仅在 /api/session/confirm（UI 按�
 
 | 验证层 | 覆盖 | 结果 |
 | --- | --- | --- |
-| ① pytest（`tests/`） | 状态机 / 幂等 / 并发 / 订单归属 / token / XSS（静态+DOM 行为）/ handoff 结构化 / RAG 用例自洽 | **110/110 PASS** |
+| ① pytest（`tests/`） | 状态机 / 幂等 / 并发 / 订单归属 / token / XSS（静态+DOM 行为）/ handoff 结构化 / RAG 用例自洽 / 持久化（双后端一致性 + 重启存活） | **126/126 PASS** |
 | ② 评估套件（`run_eval`） | TC-01~TC-14（检索·工具·状态机·agent live）+ TC-AUTH + RAG 45 条 4 项指标 | **20/20 PASS** |
 | ③ HTTP 能力验证（`verify_capabilities.py`） | 边界 1 / 确认 5 / 状态 4 / handoff 3 / 来源与轨迹 3，打真实端口 | **16/16 PASS** |
 | 手动场景 | 本文档第 1 节 A–I | 按上述步骤复现 |

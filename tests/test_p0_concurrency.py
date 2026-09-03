@@ -22,11 +22,11 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset():
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
     main_module.order_api = MockOrderAPI()
     yield
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
 
 

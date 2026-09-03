@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sqlite3
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -54,12 +56,40 @@ def build_model():
     )
 
 
+CHECKPOINT_DB_PATH = ".data/agent_checkpoints.db"
+
+
+def build_checkpointer():
+    """Conversation memory backend, aligned with the state persistence mode.
+
+    Why the checkpointer matters: without it (or with MemorySaver in
+    production) the *conversation history* is lost on restart while the action
+    store survives — the agent would forget what it proposed, but the
+    proposal would still be confirmable. Durable checkpointer + durable
+    SessionStore keeps memory and actions in the same crash domain.
+
+    - `PERSISTENCE=memory` (tests / evaluation): MemorySaver, no files written.
+    - `PERSISTENCE=sqlite` (default, server): SqliteSaver. The connection is
+      `check_same_thread=False` because FastAPI runs sync endpoints in a
+      threadpool; SqliteSaver serializes access with its own lock.
+    """
+    mode = os.environ.get("PERSISTENCE", "sqlite").strip().lower()
+    if mode == "memory":
+        return MemorySaver()
+    path = Path(os.environ.get("CHECKPOINT_DB_PATH", CHECKPOINT_DB_PATH))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, check_same_thread=False)
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    return SqliteSaver(conn)
+
+
 def build_agent():
     return create_react_agent(
         model=build_model(),
         tools=TOOLS,
         prompt=SYSTEM_PROMPT,
-        checkpointer=MemorySaver(),
+        checkpointer=build_checkpointer(),
     )
 
 

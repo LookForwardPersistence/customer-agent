@@ -53,9 +53,10 @@ from .store import (
 # CONFIRMING watchdog: a dispatched action must never be stuck forever.
 # Startup recovery + periodic sweep move stale CONFIRMING -> UNKNOWN, so a
 # crashed/mid-flight confirmation degrades to the query-only recovery path
-# instead of permanently answering "already_confirming". (With in-memory state
-# a restart empties the store; the sweeper mainly guards long-lived processes
-# and future persistent stores.)
+# instead of permanently answering "already_confirming". State is durable
+# (SQLite by default), so the startup pass recovers CONFIRMING actions that
+# were orphaned by the previous process — the sweeper additionally guards
+# long-lived processes against stuck threads.
 # ---------------------------------------------------------------------------
 SWEEP_INTERVAL_SECONDS = 10
 

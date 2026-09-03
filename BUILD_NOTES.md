@@ -23,8 +23,9 @@ after the initial build, listed here for full transparency):
 | Action-lifecycle hardening: addressable `action_id`, CAS on confirm, proposal fingerprint, idempotency, `UNKNOWN` + read-back recovery, confirm-timeout sweeper | ~45 min |
 | Deterministic server-rendered execution replies + trusted `SystemMessage` channel (LLM never on the write path) | ~20 min |
 | XSS hardening (CSP, externalized JS, `textContent` rendering) + DOM behavior harness | ~30 min |
-| P0/P1 pytest regression suite (currently **110 tests**) | ~30 min |
+| P0/P1/P2 pytest regression suite (currently **126 tests**) | ~30 min |
 | Live agent-layer eval + RAG final-answer benchmark (45 cases) | ~60 min |
+| Durable state: `StateBackend` protocol (memory/SQLite), SQLite checkpointer, restart-survival tests | ~45 min |
 | Demo video + verification docs | ~30 min |
 
 ## Use of AI coding tools (and what I verified myself)
@@ -77,7 +78,7 @@ with plain `pip` and still get identical versions:
 
 ```bash
 uv lock                                                              # re-resolve after editing pyproject.toml
-uv export --no-dev --no-hashes --no-emit-project -o requirements.txt  # regenerate the export
+uv export --format requirements-txt --no-hashes --extra dev -o requirements.txt  # regenerate the export
 uv lock --check                                                      # CI gate: lock matches pyproject
 ```
 
@@ -85,7 +86,7 @@ Both files are committed; changing a dependency requires re-running the export,
 which is exactly the kind of drift the `lockfile` CI job is there to catch.
 
 Verified locally: a clean virtualenv built from `requirements.txt` plus
-`pip install -e . --no-deps` runs the full suite (110 passed). One environment
+`pip install -e . --no-deps` runs the full suite (126 passed). One environment
 gotcha worth recording — on machines whose pip points at a PyPI *mirror*, the
 export may fail with "No matching distribution found", because mirrors lag the
 real index. That is a mirror problem, not a lockfile problem; `pip install -i
@@ -93,12 +94,13 @@ https://pypi.org/simple -r requirements.txt` confirms it.
 
 ## Intentionally NOT built (and why)
 
-- **No persistence / no external identity provider** — sessions, tokens, and
-  order data are in-memory (`MemorySaver`, `SessionStore`, `TokenService`,
-  JSON mock). Bearer-token auth and per-customer order scoping *are* built in;
-  what is not built is the production plumbing around them: refresh/revocation,
-  Redis/Postgres checkpointer, and a real OMS. The `OrderAPI` protocol and the
-  `AuthenticatedCustomer` dependency are the seams for each.
+- **SQLite persistence is built, production-grade replication is not** — sessions,
+  tokens, and conversation checkpoints are durable via a `StateBackend` protocol
+  (stdlib sqlite3, WAL + `synchronous=FULL`), so a restart keeps proposals
+  confirmable and orphaned `CONFIRMING` actions recover via the startup sweep.
+  What is *not* built is multi-node plumbing: Redis/Postgres backends, token
+  refresh/revocation endpoints, and a real OMS. The `StateBackend`/`OrderAPI`
+  protocols and the `AuthenticatedCustomer` dependency are the seams for each.
 - **No streaming responses** — request/response JSON keeps the trace and
   confirmation flow simple; streaming is a UX polish, not a reliability feature.
 - **No embedding/vector retrieval** — a dependency-free character-bigram scorer
@@ -164,9 +166,10 @@ cases and the RAG benchmark require `OPENAI_API_KEY`.
 | Auth | TC-AUTH | PASS — cross-customer confirm rejected (409), other customer's order → `ORDER_NOT_FOUND` |
 | RAG final-answer benchmark | 4 metrics over **45 queries** | PASS — groundedness, claim-level citation support, refusal accuracy (threshold ≥ 80%), plus a non-gating over-citation diagnostic |
 
-Regression suite (`tests/`): **110 passed** in ~3 s (pytest; auth, action
+Regression suite (`tests/`): **126 passed** in ~3 s (pytest; auth, action
 lifecycle, idempotency/read-back, concurrency, XSS behavior via a DOM harness,
-demo reset, handoff payload structure, RAG benchmark self-consistency).
+demo reset, handoff payload structure, RAG benchmark self-consistency,
+persistence — backend consistency matrix plus restart survival).
 
 ### Two RAG metric defects found by expanding to 45 cases
 

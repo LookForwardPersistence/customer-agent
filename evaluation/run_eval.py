@@ -31,6 +31,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Evaluation must run isolated: never read or wipe a real state database.
+# This has to happen before any `app.*` import creates module-level singletons.
+os.environ.setdefault("PERSISTENCE", "memory")
+
 from app.knowledge_base import kb
 from app.mock_backend import MockOrderAPI
 from app.tools import get_order_status, propose_return, search_knowledge_base
@@ -122,7 +126,7 @@ def test_state_machine():
     from app.store import sessions
 
     client = TestClient(app)
-    sessions._sessions.clear()
+    sessions.clear()
     main_module.order_api = MockOrderAPI()
 
     def hdr(tok):
@@ -150,7 +154,7 @@ def test_state_machine():
     record("TC-08", ok, f"ticket={data['action']['result'].get('return_ticket')}, order status={updated}")
 
     # TC-11: confirm on AT-10099 (赵先生) -> simulated backend failure surfaces cleanly
-    sessions._sessions.clear()
+    sessions.clear()
     main_module.order_api = MockOrderAPI()
     tok, sid = _new_api_session(client, "CUST-003")
     proposal = _inject_proposal(sid, "AT-10099")

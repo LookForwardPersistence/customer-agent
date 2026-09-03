@@ -22,8 +22,11 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Header, HTTPException
+
+from .persistence import build_backend
 
 SESSION_TTL_SECONDS = 24 * 3600
 MAX_SESSIONS_PER_CUSTOMER = 5
@@ -36,45 +39,60 @@ class AuthenticatedCustomer:
 
 
 class TokenService:
+    """Issues and resolves bearer tokens, persisted through a StateBackend.
+
+    Tokens live in storage rather than process memory so a restart does not
+    silently invalidate every active session (and so revocation/expiry survive
+    a deploy). Reads hit the backend on every request — a primary-key lookup is
+    microseconds, and correctness beats a cache here.
+    """
+
     def __init__(
         self,
         ttl_seconds: int = SESSION_TTL_SECONDS,
         max_sessions_per_customer: int = MAX_SESSIONS_PER_CUSTOMER,
+        backend: Any = None,
     ):
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
         self._cap = max_sessions_per_customer
-        self._tokens: dict[str, tuple[AuthenticatedCustomer, float]] = {}
+        self._backend = backend if backend is not None else build_backend()
 
     def issue(self, customer_id: str, session_id: str) -> str:
         token = secrets.token_urlsafe(24)
         now = time.time()
         with self._lock:
             self._evict_expired(now)
-            live = [t for t, (c, _) in self._tokens.items() if c.customer_id == customer_id]
-            while len(live) >= self._cap:
-                oldest = min(live, key=lambda t: self._tokens[t][1])
-                del self._tokens[oldest]
-                live.remove(oldest)
-            self._tokens[token] = (AuthenticatedCustomer(customer_id, session_id), now)
+            live = [
+                (t, meta["issued_at"])
+                for t, meta in self._backend.load_tokens().items()
+                if meta["customer_id"] == customer_id
+            ]
+            # Evict oldest-first until the new session fits under the cap.
+            for t, _ in sorted(live, key=lambda x: x[1])[: max(0, len(live) - (self._cap - 1))]:
+                self._backend.delete_token(t)
+            self._backend.save_token(token, customer_id, session_id, now)
         return token
 
     def resolve(self, token: str) -> AuthenticatedCustomer | None:
         now = time.time()
         with self._lock:
-            entry = self._tokens.get(token)
-            if entry is None or now - entry[1] > self._ttl:
-                self._tokens.pop(token, None)
+            meta = self._backend.load_tokens().get(token)
+            if meta is None:
                 return None
-            return entry[0]
+            if now - meta["issued_at"] > self._ttl:
+                self._backend.delete_token(token)
+                return None
+            return AuthenticatedCustomer(meta["customer_id"], meta["session_id"])
 
     def _evict_expired(self, now: float) -> None:
-        for t in [t for t, (_, ts) in self._tokens.items() if now - ts > self._ttl]:
-            del self._tokens[t]
+        for t, meta in self._backend.load_tokens().items():
+            if now - meta["issued_at"] > self._ttl:
+                self._backend.delete_token(t)
 
     def clear(self) -> None:
         with self._lock:
-            self._tokens.clear()
+            self._backend.clear_tokens()
 
 
 tokens = TokenService()

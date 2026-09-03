@@ -31,6 +31,8 @@ import threading
 import time
 from typing import Any
 
+from .persistence import build_backend, _empty_session
+
 # -- action lifecycle --------------------------------------------------------
 PROPOSED = "PROPOSED"        # shown to the user, awaiting confirmation
 CONFIRMING = "CONFIRMING"    # execution dispatched, outcome not yet known
@@ -79,21 +81,35 @@ def new_session_id() -> str:
 
 
 class SessionStore:
-    def __init__(self, ttl_seconds: int = PROPOSAL_TTL_SECONDS):
+    """Action state machine. All lifecycle logic lives here, nowhere else.
+
+    Storage goes through a `StateBackend`, so the same logic runs on memory or
+    on SQLite. There is deliberately **no** in-process cache of session state:
+    a cache would be a second copy that can drift from the durable one, and the
+    invariants below are exactly the kind of thing that drift breaks.
+    """
+
+    def __init__(self, backend: Any = None, ttl_seconds: int = PROPOSAL_TTL_SECONDS):
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
-        self._sessions: dict[str, dict[str, Any]] = {}
+        self._backend = backend if backend is not None else build_backend()
 
     # -- internals -----------------------------------------------------------
 
-    def _session(self, sid: str) -> dict[str, Any]:
-        if sid not in self._sessions:
-            self._sessions[sid] = {"actions": {}, "handoff": None, "events": []}
-        return self._sessions[sid]
+    def _load(self, sid: str) -> dict[str, Any]:
+        return self._backend.load(sid) or _empty_session()
+
+    def _save(self, sid: str, s: dict[str, Any]) -> None:
+        self._backend.save(sid, s)
 
     @staticmethod
     def _is_expired(action: dict[str, Any], now: float) -> bool:
         return action["state"] == PROPOSED and now > action["expires_at"]
+
+    def clear(self) -> None:
+        """Drop all sessions. Test/reset helper only."""
+        with self._lock:
+            self._backend.clear()
 
     # -- proposal ------------------------------------------------------------
 
@@ -101,7 +117,7 @@ class SessionStore:
         """Register a new proposal, superseding any still-open one of same type."""
         now = time.time()
         with self._lock:
-            s = self._session(sid)
+            s = self._load(sid)
             for a in s["actions"].values():
                 if a["type"] == action_type and a["state"] == PROPOSED:
                     a["state"] = SUPERSEDED
@@ -119,6 +135,7 @@ class SessionStore:
                 "error": None,
             }
             s["actions"][action["action_id"]] = action
+            self._save(sid, s)
             return dict(action)
 
     # -- confirmation --------------------------------------------------------
@@ -132,8 +149,8 @@ class SessionStore:
         """
         now = time.time()
         with self._lock:
-            s = self._sessions.get(sid)
-            action = s["actions"].get(action_id) if s else None
+            s = self._load(sid)
+            action = s["actions"].get(action_id)
             if action is None:
                 # Distinguish only for logging; the API collapses both into 409
                 # so callers cannot probe which action ids exist cross-session.
@@ -145,9 +162,11 @@ class SessionStore:
             if self._is_expired(action, now):
                 action["state"] = EXPIRED
                 action["closed_at"] = now
+                self._save(sid, s)
                 return None, "expired"
             action["state"] = CONFIRMING
             action["dispatched_at"] = now
+            self._save(sid, s)
             return dict(action), None
 
     def finish(
@@ -166,8 +185,8 @@ class SessionStore:
         error and is rejected, leaving the stored state untouched.
         """
         with self._lock:
-            s = self._sessions.get(sid)
-            action = s["actions"].get(action_id) if s else None
+            s = self._load(sid)
+            action = s["actions"].get(action_id)
             if action is None:
                 return None
             if action["state"] in TERMINAL_STATES and action.get("result") is not None:
@@ -180,6 +199,7 @@ class SessionStore:
             action["result"] = result
             action["error"] = error
             action["closed_at"] = time.time()
+            self._save(sid, s)
             return dict(action)
 
     def sweep_stale_confirming(self, now: float | None = None) -> list[str]:
@@ -193,7 +213,11 @@ class SessionStore:
         now = time.time() if now is None else now
         swept: list[str] = []
         with self._lock:
-            for s in self._sessions.values():
+            # Iterate the backend, not an in-process view: after a restart the
+            # orphaned CONFIRMING actions live only in storage, so sweeping a
+            # cache would miss exactly the actions we need to recover.
+            for sid, s in self._backend.all_sessions().items():
+                changed = False
                 for a in s["actions"].values():
                     if a["state"] != CONFIRMING:
                         continue
@@ -206,29 +230,33 @@ class SessionStore:
                         }
                         a["closed_at"] = now
                         swept.append(a["action_id"])
+                        changed = True
+                if changed:
+                    self._save(sid, s)
         return swept
 
     def cancel(self, sid: str, action_id: str) -> tuple[dict[str, Any] | None, str | None]:
         with self._lock:
-            s = self._sessions.get(sid)
-            action = s["actions"].get(action_id) if s else None
+            s = self._load(sid)
+            action = s["actions"].get(action_id)
             if action is None or action["session_id"] != sid:
                 return None, "not_found"
             if action["state"] != PROPOSED:
                 return None, f"already_{action['state'].lower()}"
             if self._is_expired(action, time.time()):
                 action["state"] = EXPIRED
+                self._save(sid, s)
                 return None, "expired"
             action["state"] = CANCELLED
             action["closed_at"] = time.time()
+            self._save(sid, s)
             return dict(action), None
 
     # -- queries -------------------------------------------------------------
 
     def get_action(self, sid: str, action_id: str) -> dict[str, Any] | None:
         with self._lock:
-            s = self._sessions.get(sid)
-            action = s["actions"].get(action_id) if s else None
+            action = self._load(sid)["actions"].get(action_id)
             if action is None or action["session_id"] != sid:
                 return None
             return dict(action)
@@ -236,23 +264,14 @@ class SessionStore:
     def pending(self, sid: str) -> dict[str, Any] | None:
         """The action the UI should render as confirmable (or a recovery state)."""
         with self._lock:
-            s = self._sessions.get(sid)
-            if not s:
-                return None
-            open_actions = [
-                a for a in s["actions"].values()
-                if a["state"] in CONFIRMABLE_STATES or a["state"] in (CONFIRMING, UNKNOWN)
-            ]
-            if not open_actions:
-                return None
-            return dict(max(open_actions, key=lambda a: a["created_at"]))
+            return self._pending_unlocked(self._load(sid))
 
     def latest_action(self, sid: str) -> dict[str, Any] | None:
         with self._lock:
-            s = self._sessions.get(sid)
-            if not s:
+            actions = self._load(sid)["actions"].values()
+            if not actions:
                 return None
-            return dict(max(s["actions"].values(), key=lambda a: a["created_at"]))
+            return dict(max(actions, key=lambda a: a["created_at"]))
 
     # -- handoff --------------------------------------------------------------
 
@@ -272,8 +291,7 @@ class SessionStore:
     )
     _ESCALATION_WORDS = ("投诉", "差评", "举报", "骗子", "12315")
 
-    def _build_handoff_payload(self, sid: str, reason: str) -> dict[str, Any]:
-        s = self._sessions.get(sid) or {"events": []}
+    def _build_handoff_payload(self, sid: str, s: dict[str, Any], reason: str) -> dict[str, Any]:
         events = s.get("events", [])
 
         order_ids: list[str] = []
@@ -318,35 +336,36 @@ class SessionStore:
         }
 
     def set_handoff(self, sid: str, reason: str, summary: str) -> dict[str, Any]:
-        payload = self._build_handoff_payload(sid, reason)
-        record = {
-            "id": "HO-" + secrets.token_hex(4).upper(),
-            "reason": reason,
-            "summary": summary,
-            "payload": payload,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "status": "等待人工接入",
-        }
         with self._lock:
-            self._session(sid)["handoff"] = record
+            s = self._load(sid)
+            payload = self._build_handoff_payload(sid, s, reason)
+            record = {
+                "id": "HO-" + secrets.token_hex(4).upper(),
+                "reason": reason,
+                "summary": summary,
+                "payload": payload,
+                "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "等待人工接入",
+            }
+            s["handoff"] = record
+            self._save(sid, s)
         return record
 
     def get_handoff(self, sid: str) -> dict[str, Any] | None:
         with self._lock:
-            s = self._sessions.get(sid)
-            return s["handoff"] if s else None
+            return self._load(sid)["handoff"]
 
     # -- audit ------------------------------------------------------------------
 
     def log(self, sid: str, event: dict[str, Any]) -> None:
         with self._lock:
-            self._session(sid)["events"].append(
-                {"ts": time.strftime("%H:%M:%S"), **event}
-            )
+            s = self._load(sid)
+            s["events"].append({"ts": time.strftime("%H:%M:%S"), **event})
+            self._save(sid, s)
 
     def snapshot(self, sid: str) -> dict[str, Any]:
         with self._lock:
-            s = self._sessions.get(sid) or {"actions": {}, "handoff": None, "events": []}
+            s = self._load(sid)
             return {
                 "pending_action": self._pending_unlocked(s),
                 "handoff": s["handoff"],

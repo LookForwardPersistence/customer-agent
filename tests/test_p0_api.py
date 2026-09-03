@@ -19,12 +19,12 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset_store_and_backend():
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
     from app import main as main_module
     main_module.order_api = MockOrderAPI()
     yield
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
 
 

@@ -4,7 +4,11 @@ __pycache__/
 .venv/
 .DS_Store
 .pytest_cache/
+.pytest_tmp/
 *.egg-info/
+
+# 运行时状态（PERSISTENCE=sqlite 时的会话/动作/token/checkpoint 数据库）
+.data/
 
 # 生成物：每次评估运行都会带 run_id 新写一份，不入版本库（保留 results.md 作为快照）
 evaluation/results_*_live.md

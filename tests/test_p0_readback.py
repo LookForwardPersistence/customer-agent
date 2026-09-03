@@ -28,11 +28,11 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset():
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
     main_module.order_api = MockOrderAPI()
     yield
-    sessions._sessions.clear()
+    sessions.clear()
     auth.tokens.clear()
 
 
@@ -88,8 +88,11 @@ def test_sweep_marks_stale_confirming_unknown():
     stored = sessions.get_action(s, action["action_id"])
     assert stored["state"] == CONFIRMING
 
-    # 人为把 dispatched_at 拨回过去，模拟超时
-    sessions._sessions[s]["actions"][action["action_id"]]["dispatched_at"] -= 999
+    # 人为把 dispatched_at 拨回过去，模拟超时。
+    # 通过后端 load→mutate→save，兼容 Memory/Sqlite 两种后端。
+    s_data = sessions._backend.load(s)
+    s_data["actions"][action["action_id"]]["dispatched_at"] -= 999
+    sessions._backend.save(s, s_data)
 
     swept = sessions.sweep_stale_confirming()
     assert action["action_id"] in swept

@@ -176,7 +176,7 @@ PROPOSED → CANCELLED / EXPIRED / SUPERSEDED
 
 ### 4.6 `app/auth.py` — 身份与客户隔离(~114 行)
 
-- `TokenService`：内存签发 `secrets.token_urlsafe(24)` 的 bearer token，绑定 `(customer_id, session_id)`；TTL 24h、每客户最多 5 个并发会话（最旧淘汰）；
+- `TokenService`：签发 `secrets.token_urlsafe(24)` 的 bearer token，绑定 `(customer_id, session_id)` 并存入 StateBackend（重启后 token 仍有效）；TTL 24h、每客户最多 5 个并发会话（最旧淘汰）；
 - `get_customer`（FastAPI 依赖）：解析 `Authorization: Bearer`，失败→401；
 - **CSRF 说明**：token 走 header 而非 cookie，跨站请求伪造不适用；
 - `_current_customer_id`（ContextVar）：请求级客户上下文。`bind/unbind` 在 `/api/chat` 中成对出现，agent 的工具通过 `current_customer_id()` 拿当前客户——代码只要往下走，就始终带"谁在操作"。

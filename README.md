@@ -51,6 +51,7 @@ Four properties follow from that shape, each covered by tests:
 - **A model failure cannot swallow a business result.** The outcome is persisted before the response is built, and the reply comes from a template — so a timeout or a missing API key cannot hide a return that was actually created. Replays are de-duplicated by `idempotency_key = action_id`, and a changed proposal (item/amount/policy/order version) is refused as `STALE_PROPOSAL`.
 - **A transient failure is not a silent failure.** Backend timeouts land in `UNKNOWN`, not `FAILED`; recovery is a read-only lookup, never a blind retry, and a watchdog prevents actions from hanging in `CONFIRMING`.
 - **Background events are not user-forgeable.** Results reach the model over `SystemMessage`, a channel the user cannot write to; a user typing "[系统事件] …" is stripped and logged.
+- **State is durable by default.** Session actions, tokens, and LangGraph conversation checkpoints live in SQLite (`PERSISTENCE=sqlite`, files under `.data/`); a restart keeps proposals confirmable and sweeps orphaned `CONFIRMING` actions to `UNKNOWN`. Tests and evaluation run with `PERSISTENCE=memory` (no files written).
 
 Other deliberate choices (details in `BUILD_NOTES.md`):
 
@@ -61,7 +62,7 @@ Other deliberate choices (details in `BUILD_NOTES.md`):
 ## Evaluation
 
 ```bash
-uv run python -m pytest tests evaluation -q       # 110 tests, no LLM needed, ~3s
+uv run python -m pytest tests evaluation -q       # 126 tests, no LLM needed, ~3s
 uv run python -m evaluation.run_eval              # 20/20 (agent layer skipped without a key)
 
 # Targeted live verification of the core capabilities (server running, 16 HTTP-level checks):
@@ -90,9 +91,11 @@ app/
   knowledge_base.py   KB loader + dependency-free bigram retrieval
   mock_backend.py     OrderAPI protocol + mock (clear contract, swappable)
   store.py            Action state machine (PROPOSED→…→SUCCEEDED/FAILED/UNKNOWN) + audit log
+  persistence.py      StateBackend protocol: Memory (tests) / SQLite (default, durable)
   data/               knowledge_base.json (14 entries), orders.json (5 orders)
   static/             Chat UI (multi-turn, sources, trace, confirm, handoff)
-tests/                110 tests: action lifecycle, auth, XSS (static + DOM behaviour), RAG self-check
+tests/                126 tests: action lifecycle, auth, XSS (static + DOM behaviour), RAG self-check,
+                      persistence (backend consistency matrix + restart survival)
 evaluation/
   test_cases.json     15 behavioural cases with expected behavior
   rag_cases.json      45-query RAG final-answer benchmark

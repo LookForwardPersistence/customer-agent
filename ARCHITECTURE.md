@@ -279,8 +279,8 @@ wati-agent/
 
 | 已知限制                                                  | 下一步                                                        |
 | ----------------------------------------------------- | ---------------------------------------------------------- |
-| MemorySaver / SessionStore / TokenService 均在进程内存，重启即失 | 换 Redis/Postgres checkpointer，SessionStore/TokenService 落库 |
-| token 为服务端内存签发，无刷新/吊销接口                               | 接入 JWT + 刷新令牌 / 网关级会话管理（当前 24h TTL + 会话数上限已覆盖演示场景）         |
+| 状态已落 SQLite（单机单 worker；多进程部署需改条件 UPDATE 或 Redis 后端） | `StateBackend` 协议已就位，接 Redis/Postgres 只需新实现一个类                |
+| token 为服务端签发存库，无刷新/吊销接口                               | 接入 JWT + 刷新令牌 / 网关级会话管理（当前 24h TTL + 会话数上限已覆盖演示场景）         |
 | bigram 检索对长 query/同义改写弱                               | 换 embedding + 向量库，`search()` 签名不变                          |
 | handoff 已结构化，但无真实人工队列                                 | 对接工单系统（Wati 本业），HandoffPayload 直接建 ticket                  |
 | Trace 面板无持久化聚合                                        | 接 LLM-as-judge 离线评估 + trace 落数仓做质量监控                       |
