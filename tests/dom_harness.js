@@ -36,6 +36,8 @@ class El {
   set innerHTML(v) { this._innerHTML = String(v); innerHTMLAssignments.push(String(v)); }
   appendChild(c) { this.children.push(c); c.parentElement = this; return c; }
   append(...cs) { cs.forEach(c => this.appendChild(c)); }
+  setAttribute(k, v) { this.attributes[k] = String(v); }
+  getAttribute(k) { return this.attributes[k]; }
   addEventListener() {}
   querySelectorAll(sel) { // only used with 'button' by app.js
     const out = [];

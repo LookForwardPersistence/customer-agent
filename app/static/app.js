@@ -41,6 +41,9 @@ function addMetaSources(rowEl, sources) {
 
 function showTyping() {
   const row = document.createElement('div'); row.className = 'row bot'; row.id = 'typingRow';
+  // Decorative animation — keep it out of the screen-reader announcement;
+  // the real reply lands in the aria-live log and gets announced there.
+  row.setAttribute('aria-hidden', 'true');
   const av = document.createElement('div'); av.className = 'avatar bot'; av.textContent = '极';
   const b = document.createElement('div'); b.className = 'bubble';
   b.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
@@ -113,6 +116,9 @@ function renderPending(rowEl, pending) {
 function renderHandoff(handoff) {
   const el = document.createElement('div');
   el.className = 'handoff';
+  // assertive: a handoff changes what the customer must do next — announce
+  // it immediately rather than waiting for the polite queue.
+  el.setAttribute('role', 'alert');
 
   const head = document.createElement('b');
   head.textContent = `转人工客服 · ${handoff.id}（${handoff.status}）`;
@@ -250,8 +256,10 @@ document.getElementById('quick').addEventListener('click', e => {
   if (e.target.tagName === 'BUTTON') sendMsg(e.target.textContent);
 });
 document.getElementById('traceToggle').addEventListener('click', e => {
-  document.getElementById('tracePanel').classList.toggle('open');
+  const open = document.getElementById('tracePanel').classList.toggle('open');
   e.target.classList.toggle('active');
+  // aria-pressed mirrors the panel state for assistive tech.
+  e.target.setAttribute('aria-pressed', open ? 'true' : 'false');
 });
 
 async function newSession(customerId) {

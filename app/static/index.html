@@ -13,9 +13,9 @@
     --bg: #f5f7fa; --panel: #ffffff; --border: #e4e8ee;
     --text: #1f2937; --muted: #6b7280;
     --brand: #4f46e5; --brand-soft: #eef2ff;
-    --green: #059669; --green-soft: #ecfdf5;
+    --green: #047857; --green-soft: #ecfdf5;
     --amber: #b45309; --amber-soft: #fffbeb;
-    --red: #dc2626; --red-soft: #fef2f2;
+    --red: #b91c1c; --red-soft: #fef2f2;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -135,15 +135,17 @@
         <h1>Aurora Tech Store</h1>
         <div class="sub">智能客服 · 小极 | 在线 9:00–21:00</div>
       </div>
-      <button class="trace-btn" id="traceToggle">执行轨迹 Trace</button>
-      <select id="customerSel" title="切换演示客户（将创建新会话）">
+      <button class="trace-btn" id="traceToggle" aria-pressed="false" aria-controls="tracePanel">执行轨迹 Trace</button>
+      <select id="customerSel" title="切换演示客户（将创建新会话）" aria-label="切换演示客户">
         <option value="CUST-001">陈先生（演示主账号）</option>
         <option value="CUST-002">李女士</option>
         <option value="CUST-003">赵先生</option>
         <option value="CUST-004">王先生</option>
       </select>
     </header>
-    <div id="messages">
+    <!-- role=log + aria-live: screen readers announce bot replies, action
+         cards and handoff banners as they arrive. -->
+    <div id="messages" role="log" aria-live="polite">
       <div class="welcome">
         <b>您好，我是小极 👋</b><br>
         我是 Aurora Tech Store 的客服专员，可以帮您：
@@ -158,12 +160,13 @@
       <button>你们能帮我写个 Python 脚本吗</button>
     </div>
     <div class="input-bar">
-      <input id="input" placeholder="输入您的问题…" autocomplete="off">
+      <input id="input" placeholder="输入您的问题…" autocomplete="off"
+             aria-label="输入您的问题" maxlength="2000">
       <button class="send" id="send">发送</button>
     </div>
   </div>
 
-  <div class="trace-panel" id="tracePanel">
+  <div class="trace-panel" id="tracePanel" role="region" aria-label="执行轨迹面板">
     <h3>执行轨迹（最近一轮）</h3>
     <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:8px;">
       <input type="checkbox" id="rawTraceToggle"> 显示未脱敏原始内容（仅本地排查用）
